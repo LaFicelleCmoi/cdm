@@ -24,11 +24,16 @@
   function normalize(keyEvents) {
     return (keyEvents || []).map(k => {
       const t = (k.type && k.type.text) || '';
+      const desc = k.text || '';
       const parts = (k.participants || [])
         .map(p => (p && p.athlete && p.athlete.displayName) || '')
         .filter(Boolean);
+      let kind = kindOf(t);
+      // Pause fraîcheur (drinks/cooling break) = "Start Delay" avec ce motif ; fin = "End Delay"
+      if (/start delay/i.test(t) && /drink|cool|water|hydrat/i.test(desc)) kind = 'cooling';
+      else if (/end delay/i.test(t)) kind = 'enddelay';
       return {
-        kind: kindOf(t),
+        kind,
         typeText: t,
         clock: (k.clock && k.clock.displayValue) || '',
         team: (k.team && k.team.displayName) || '',
@@ -37,6 +42,13 @@
         scoring: !!k.scoringPlay,
       };
     });
+  }
+
+  // Une pause fraîcheur est-elle en cours ? (dernier "cooling" non suivi d'un "enddelay")
+  function coolingActive(list) {
+    let lastC = -1, lastE = -1;
+    (list || []).forEach((e, i) => { if (e.kind === 'cooling') lastC = i; else if (e.kind === 'enddelay') lastE = i; });
+    return lastC > lastE;
   }
 
   async function fetchEvents(eventId, maxAgeMs = 25000) {
@@ -74,5 +86,6 @@
     goals: (list) => (list || []).filter(e => GOALISH.includes(e.kind)),
     isGoal: (e) => GOALISH.includes(e.kind),
     tag: (e) => TAG[e && e.kind] || '',
+    coolingActive,
   };
 })();

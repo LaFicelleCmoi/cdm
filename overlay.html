@@ -81,6 +81,8 @@
   .sb-feed .fe-emoji { font-size: 16px; }
   .sb-feed .fe-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
   .sb-feed.red .fe-clock { color: var(--red); }
+  .sb-feed.cooling { border-color: rgba(56,189,248,0.45); }
+  .sb-feed.cooling .fe-player { color: #7fdbff; }
   .sb-feed .fe-player { color: #fff; }
   .sb-feed .fe-tag { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: .04em; }
 </style>
@@ -174,13 +176,22 @@
       const r = await fetch(SUMMARY + id, { cache: 'no-store' });
       if (!r.ok) throw 0;
       const d = await r.json();
-      const list = (d.keyEvents || []).map(k => ({
+      const ke = d.keyEvents || [];
+      // Pause fraîcheur en cours : dernier "drinks break" non suivi d'un "End Delay"
+      let lastC = -1, lastE = -1;
+      ke.forEach((k, i) => {
+        const tp = (k.type || {}).text || '', tx = k.text || '';
+        if (/start delay/i.test(tp) && /drink|cool|water|hydrat/i.test(tx)) lastC = i;
+        else if (/end delay/i.test(tp)) lastE = i;
+      });
+      const cooling = lastC > lastE;
+      const list = ke.map(k => ({
         kind: evKind((k.type || {}).text),
         clock: (k.clock || {}).displayValue || '',
         player: ((k.participants || [])[0] || {}).athlete ? k.participants[0].athlete.displayName : '',
         team: (k.team || {}).displayName || '',
       })).filter(e => FEED_EMOJI[e.kind]);
-      evCache[id] = { ts: Date.now(), list };
+      evCache[id] = { ts: Date.now(), list, cooling };
       return list;
     } catch (e) { return (c && c.list) || []; }
   }
@@ -243,6 +254,15 @@
     if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); feedItems = []; feedMatchId = null; stopFeedRotation(); return; }
     const list = await fetchEv(ev.id);
     paintCards(list, ev); // rappel cartons par équipe
+    // Pause fraîcheur en cours → encart spécial prioritaire (on stoppe le défilement)
+    if ((evCache[ev.id] || {}).cooling) {
+      stopFeedRotation();
+      const el = feedEl();
+      el.className = 'sb-feed show cooling';
+      el.innerHTML = `<span class="fe-emoji">💧</span><span class="fe-player">Pause fraîcheur</span>`;
+      feedItems = (list || []).slice(-MAX_FEED); feedMatchId = ev.id;
+      return;
+    }
     const items = (list || []).slice(-MAX_FEED); // N plus récents (déjà filtrés "feed")
     if (!items.length) { if (f) f.classList.remove('show'); feedItems = []; stopFeedRotation(); return; }
 

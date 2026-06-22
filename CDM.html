@@ -19,8 +19,8 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=5"></script>
-<script src="events.js?v=2"></script>
+<script src="i18n.js?v=6"></script>
+<script src="events.js?v=3"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -124,6 +124,7 @@ body::before {
 .lw-more { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); text-align: center; font-size: 0.55em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .lw-feed { display: none; margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); text-align: center; font-size: 0.78em; font-weight: 700; color: var(--white); }
 .lw-feed.show { display: block; }
+.lw-feed.cooling { color: #7fdbff; border-top-color: rgba(56,189,248,0.35); }
 .lwf-em { margin-right: 4px; }
 .lwf-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
 
@@ -1903,16 +1904,22 @@ checkChampion();
     try { list = await MatchEvents.fetch(ev.id); } catch (e) { return; }
     const notable = MatchEvents.notable(list);
 
-    // 1) Dernier événement notable sous le score
+    // 1) Pause fraîcheur en cours → encart spécial ; sinon dernier événement notable
     const feed = document.getElementById('lw-feed');
     if (feed) {
-      const last = notable[notable.length - 1];
-      if (!last) { feed.classList.remove('show'); }
-      else {
-        const tg = MatchEvents.tag(last);
-        const tag = tg ? ` (${tg})` : '';
-        feed.innerHTML = `<span class="lwf-em">${MatchEvents.emoji(last)}</span><span class="lwf-clock">${esc(last.clock)}</span> ${esc(MatchEvents.lastName(last.player))}${tag}`;
-        feed.classList.add('show');
+      if (MatchEvents.coolingActive && MatchEvents.coolingActive(list)) {
+        feed.innerHTML = `<span class="lwf-em">💧</span> ${esc(window.t('cooling_break'))}`;
+        feed.classList.add('show', 'cooling');
+      } else {
+        feed.classList.remove('cooling');
+        const last = notable[notable.length - 1];
+        if (!last) { feed.classList.remove('show'); }
+        else {
+          const tg = MatchEvents.tag(last);
+          const tag = tg ? ` (${tg})` : '';
+          feed.innerHTML = `<span class="lwf-em">${MatchEvents.emoji(last)}</span><span class="lwf-clock">${esc(last.clock)}</span> ${esc(MatchEvents.lastName(last.player))}${tag}`;
+          feed.classList.add('show');
+        }
       }
     }
 
