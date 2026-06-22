@@ -37,6 +37,7 @@
       group: 'Groupe', wc2026: 'Coupe du Monde 2026',
       opponents_label: 'Adversaires de poule', view_group: 'Voir le groupe',
       results_label: 'Parcours', res_w: 'V', res_d: 'N', res_l: 'D', no_results: 'Aucun match joué',
+      scorers_label: 'Buteurs',
       /* CDM nav / controls */
       nav_back: '← Retour au Dashboard',
       tab_groups: 'PHASE DE GROUPES', tab_planning: 'PLANNING POULES', tab_bracket: 'PHASE FINALE',
@@ -96,6 +97,7 @@
       group: 'Group', wc2026: 'World Cup 2026',
       opponents_label: 'Group opponents', view_group: 'View group',
       results_label: 'Results', res_w: 'W', res_d: 'D', res_l: 'L', no_results: 'No match played yet',
+      scorers_label: 'Scorers',
       /* CDM nav / controls */
       nav_back: '← Back to Dashboard',
       tab_groups: 'GROUP STAGE', tab_planning: 'GROUP SCHEDULE', tab_bracket: 'KNOCKOUT',

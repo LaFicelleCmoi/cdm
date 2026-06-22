@@ -19,7 +19,8 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=3"></script>
+<script src="i18n.js?v=4"></script>
+<script src="events.js?v=1"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -106,6 +107,13 @@ body::before {
 .lw-team.away { flex-direction: row-reverse; }
 .lw-logo { width: 22px; height: 22px; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.4)); }
 .lw-abbr { font-size: 0.8em; font-weight: 800; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lw-tcol { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.lw-team.away .lw-tcol { align-items: flex-end; }
+.lw-cards { display: none; font-size: 0.6em; font-weight: 800; line-height: 1; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.lw-cards.show { display: flex; gap: 5px; }
+.lwc-y { color: #ffcf33; }
+.lwc-r { color: #ff5252; }
+.ko-so { font-size: 0.8em; color: var(--gold); font-weight: 700; }
 .lw-score-wrap { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
 .lw-score { font-family: var(--font-d); font-size: 1.5em; line-height: 1; color: #fff; min-width: 16px; text-align: center; transition: transform 0.3s; }
 .live-widget.state-in .lw-score { color: var(--live); }
@@ -113,6 +121,10 @@ body::before {
 @keyframes lwBump { 0% { transform: scale(1);} 40% { transform: scale(1.5);} 100% { transform: scale(1);} }
 .lw-sep { color: var(--muted); font-weight: 700; font-size: 0.85em; }
 .lw-more { margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); text-align: center; font-size: 0.55em; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.lw-feed { display: none; margin-top: 7px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,0.08); text-align: center; font-size: 0.78em; font-weight: 700; color: var(--white); }
+.lw-feed.show { display: block; }
+.lwf-em { margin-right: 4px; }
+.lwf-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
 
 @media (max-width: 900px) {
   /* Le widget passe en barre fixe en bas : on réserve la place pour ne pas masquer le footer */
@@ -1151,7 +1163,7 @@ const rounds = [
 ];
 
 rounds.forEach(r => r.matches.forEach(m => {
-  koState[m.id] = { t1:m.t1, orig_t1:m.t1, t2:m.t2, orig_t2:m.t2, s1:'', s2:'', status:'pending' };
+  koState[m.id] = { t1:m.t1, orig_t1:m.t1, t2:m.t2, orig_t2:m.t2, s1:'', s2:'', status:'pending', winner:'', so1:'', so2:'' };
 }));
 
 function updateKnockoutStage() {
@@ -1210,7 +1222,50 @@ function updateKnockoutStage() {
   buildBracket();
 }
 
+// Vainqueur (et perdant) résolu d'un match KO terminé. Tient compte des
+// tirs au but : si scores égaux, on s'appuie sur koState.winner (posé par la
+// synchro ESPN ou la propagation). Renvoie null si non résolu.
+function koResolved(id) {
+  const st = koState[id];
+  if (!st || st.status !== 'done') return null;
+  const s1 = st.s1 !== '' ? parseInt(st.s1) : null;
+  const s2 = st.s2 !== '' ? parseInt(st.s2) : null;
+  let w = st.winner || '';
+  if (!w && s1 !== null && s2 !== null) w = s1 > s2 ? st.t1 : s2 > s1 ? st.t2 : '';
+  if (!w) return null;
+  const l = (w === st.t1) ? st.t2 : st.t1;
+  return { w, l };
+}
+
+// Propage les vainqueurs des tours terminés vers les tours suivants
+// (V R16 #n → 8e, V 8e #n → quart, V QF #n → demi, V Demi #n → finale,
+//  P Demi #n → 3e place). N'écrase jamais un match déjà renseigné (score saisi
+//  ou synchro) : ne remet le placeholder que si le slot est encore « pending ».
+function advanceKnockout() {
+  const winSrc = {}, loseSrc = {};
+  for (let n = 1; n <= 16; n++) winSrc['V R16 #' + n]  = 'r16_' + String(n).padStart(2, '0');
+  for (let n = 1; n <= 8; n++)  winSrc['V 8e #' + n]   = 'r8_' + n;
+  for (let n = 1; n <= 4; n++)  winSrc['V QF #' + n]   = 'qf_' + n;
+  for (let n = 1; n <= 2; n++)  winSrc['V Demi #' + n] = 'sf_' + n;
+  for (let n = 1; n <= 2; n++)  loseSrc['P Demi #' + n] = 'sf_' + n;
+  ['r8', 'qf', 'sf', 'final'].forEach(rid => {
+    const round = rounds.find(r => r.id === rid);
+    round.matches.forEach(m => {
+      const st = koState[m.id];
+      ['t1', 't2'].forEach(side => {
+        const tag = st['orig_' + side];
+        const wId = winSrc[tag], lId = loseSrc[tag];
+        if (!wId && !lId) return;
+        const r = koResolved(wId || lId);
+        if (r) st[side] = wId ? r.w : r.l;
+        else if (st.status === 'pending') st[side] = tag; // pas encore décidé → placeholder
+      });
+    });
+  });
+}
+
 function buildBracket() {
+  advanceKnockout(); // remplit les tours suivants à partir des vainqueurs connus
   const bracket = document.getElementById('bracket');
   bracket.innerHTML='';
   rounds.forEach(r => {
@@ -1230,19 +1285,24 @@ function buildKoCard(m) {
   const st = koState[m.id];
   const s1 = st.s1!==''?parseInt(st.s1):null;
   const s2 = st.s2!==''?parseInt(st.s2):null;
+  const so1 = (st.so1!=null && st.so1!=='')?parseInt(st.so1):null;
+  const so2 = (st.so2!=null && st.so2!=='')?parseInt(st.so2):null;
+  const hasSO = so1!==null && so2!==null;
   let winnerCls = '';
-  if(st.status==='done' && s1!==null && s2!==null) {
-    winnerCls = s1>s2?'winner-top':s2>s1?'winner-bottom':'';
+  if(st.status==='done') {
+    const w = st.winner || (s1!==null && s2!==null ? (s1>s2?st.t1:s2>s1?st.t2:'') : '');
+    winnerCls = w===st.t1?'winner-top':w===st.t2?'winner-bottom':'';
   }
   const liveCls = st.status==='live'?'live-ko':'';
   const card = document.createElement('div');
   card.className = `ko-card ${m.cls||''} ${winnerCls} ${liveCls}`.trim();
+  if (hasSO) card.title = 'Décidé aux tirs au but';
 
   const dotCls = `dot-${st.status}`;
   const score1Cls = st.s1!==''?(st.status==='live'?'has-score live-val':'has-score'):'';
   const score2Cls = st.s2!==''?(st.status==='live'?'has-score live-val':'has-score'):'';
-  const score1Txt = st.s1!==''?st.s1:'–';
-  const score2Txt = st.s2!==''?st.s2:'–';
+  const score1Txt = st.s1!==''?(st.s1 + (hasSO?` <span class="ko-so">(${so1})</span>`:'')):'–';
+  const score2Txt = st.s2!==''?(st.s2 + (hasSO?` <span class="ko-so">(${so2})</span>`:'')):'–';
 
   card.innerHTML = `
     <div class="ko-card-header">
@@ -1320,9 +1380,11 @@ function buildViewerData() {
     if (roundId === 0) { op1.position = number * 2 - 1; op2.position = number * 2; }
     if (s1 !== undefined) op1.score = s1;
     if (s2 !== undefined) op2.score = s2;
-    if (st.status === 'done' && s1 !== undefined && s2 !== undefined && s1 !== s2) {
-      if (s1 > s2) { op1.result = 'win'; op2.result = 'loss'; }
-      else { op2.result = 'win'; op1.result = 'loss'; }
+    if (st.status === 'done') {
+      let w = st.winner || '';
+      if (!w && s1 !== undefined && s2 !== undefined) w = s1 > s2 ? st.t1 : s2 > s1 ? st.t2 : '';
+      if (w === st.t1) { op1.result = 'win'; op2.result = 'loss'; }
+      else if (w === st.t2) { op2.result = 'win'; op1.result = 'loss'; }
     }
     matches.push({
       id: mid, stage_id: 0, group_id: 0, round_id: roundId, number,
@@ -1440,7 +1502,8 @@ function selectStatus(s) {
 function calcKo(id) {
   const v1 = document.getElementById('modal-s1').value;
   const v2 = document.getElementById('modal-s2').value;
-  if(v1 === v2 && v1 !== '') {
+  // Nul autorisé uniquement si un vainqueur est déjà acté (tirs au but, via synchro ESPN)
+  if(v1 === v2 && v1 !== '' && !(koState[id] && koState[id].winner)) {
     const hint = document.getElementById('modal-hint');
     hint.textContent = '❌ Match nul impossible en phase finale ! (Tirs au but ?)';
     hint.style.color = 'var(--live)';
@@ -1685,8 +1748,9 @@ function launchConfetti() { Confetti.champion(); }
 /* === Detect champion when final is set === */
 function checkChampion() {
   const fin = koState.fin;
-  if (fin && fin.status === 'done' && fin.s1 !== '' && fin.s2 !== '' && fin.s1 !== fin.s2) {
-    const champ = parseInt(fin.s1) > parseInt(fin.s2) ? fin.t1 : fin.t2;
+  if (fin && fin.status === 'done' && fin.s1 !== '' && fin.s2 !== '') {
+    const champ = fin.winner || (parseInt(fin.s1) > parseInt(fin.s2) ? fin.t1 : parseInt(fin.s2) > parseInt(fin.s1) ? fin.t2 : '');
+    if (!champ) return;
     if (!sessionStorage.getItem('cdm2026_confetti_played')) {
       sessionStorage.setItem('cdm2026_confetti_played', '1');
       launchConfetti();
@@ -1827,7 +1891,7 @@ checkChampion();
       </div>
       <div class="lw-row">
         <div class="lw-team">
-          ${logoTag(home)}<span class="lw-abbr">${esc(abbr(home))}</span>
+          ${logoTag(home)}<span class="lw-tcol"><span class="lw-abbr">${esc(abbr(home))}</span><span class="lw-cards" data-side="home"></span></span>
         </div>
         <div class="lw-score-wrap">
           <span class="lw-score" data-side="h">${esc(hs)}</span>
@@ -1835,11 +1899,13 @@ checkChampion();
           <span class="lw-score" data-side="a">${esc(as)}</span>
         </div>
         <div class="lw-team away">
-          ${logoTag(away)}<span class="lw-abbr">${esc(abbr(away))}</span>
+          ${logoTag(away)}<span class="lw-tcol"><span class="lw-abbr">${esc(abbr(away))}</span><span class="lw-cards" data-side="away"></span></span>
         </div>
       </div>
+      <div class="lw-feed" id="lw-feed"></div>
       ${footer}
     `;
+    if (state === 'in' || state === 'post') updateWidgetFeed(ev); // dernier buteur / carton
 
     // Bump score on change
     const key = `${hs}-${as}`;
@@ -1854,6 +1920,50 @@ checkChampion();
       if (typeof toast === 'function') toast(`${abbr(home)} ${hs} – ${as} ${abbr(away)}`, 'live', '⚽', 3000);
     }
     lastScore[ev.id] = key;
+  }
+
+  // Dernier événement (but/carton/penalty) sous le score + rappel cartons par équipe
+  async function updateWidgetFeed(ev) {
+    if (!window.MatchEvents) return;
+    let list = [];
+    try { list = await MatchEvents.fetch(ev.id); } catch (e) { return; }
+    const notable = MatchEvents.notable(list);
+
+    // 1) Dernier événement notable sous le score
+    const feed = document.getElementById('lw-feed');
+    if (feed) {
+      const last = notable[notable.length - 1];
+      if (!last) { feed.classList.remove('show'); }
+      else {
+        const tag = last.kind === 'pen' ? ' (pen)' : last.kind === 'owngoal' ? ' (csc)' : '';
+        feed.innerHTML = `<span class="lwf-em">${MatchEvents.emoji(last)}</span><span class="lwf-clock">${esc(last.clock)}</span> ${esc(MatchEvents.lastName(last.player))}${tag}`;
+        feed.classList.add('show');
+      }
+    }
+
+    // 2) Rappel cartons 🟨/🟥 sous chaque équipe (clé = team.displayName ESPN)
+    const comp = ev.competitions[0];
+    const cs = comp.competitors || [];
+    const home = cs.find(c => c.homeAway === 'home') || cs[0];
+    const away = cs.find(c => c.homeAway === 'away') || cs[1];
+    const tally = {};
+    notable.forEach(e => {
+      if (e.kind !== 'yellow' && e.kind !== 'red') return;
+      (tally[e.team || ''] = tally[e.team || ''] || { yellow: 0, red: 0 })[e.kind]++;
+    });
+    const paint = (side, c2) => {
+      const span = el.querySelector(`.lw-cards[data-side="${side}"]`);
+      if (!span) return;
+      const nm = c2 && c2.team && c2.team.displayName;
+      const c = (nm && tally[nm]) || { yellow: 0, red: 0 };
+      let h = '';
+      if (c.yellow) h += `<span class="lwc-y">🟨${c.yellow > 1 ? '×' + c.yellow : ''}</span>`;
+      if (c.red) h += `<span class="lwc-r">🟥${c.red > 1 ? '×' + c.red : ''}</span>`;
+      span.innerHTML = h;
+      span.classList.toggle('show', !!h);
+    };
+    paint('home', home);
+    paint('away', away);
   }
 
   /* ---------- SYNC réel → simulateur ----------
@@ -1931,21 +2041,37 @@ checkChampion();
         return;
       }
 
-      // 2) Phase finale
+      // 2) Phase finale — match par nom ; la propagation (advanceKnockout)
+      //    remplit les tours suivants une fois un match terminé.
+      //    Vainqueur lu depuis ESPN (competitor.winner), tirs au but inclus.
+      const winComp = cs.find(c => c.winner === true);
+      const winName = (winComp && winComp.team) ? frName(winComp.team.displayName) : '';
+      const soByName = {};
+      cs.forEach(c => { if (c.team && c.shootoutScore != null) soByName[frName(c.team.displayName)] = parseInt(c.shootoutScore); });
+      const hasSO = Object.keys(soByName).length >= 2;
       for (const id in koState) {
         const st = koState[id];
         if (![st.t1, st.t2].includes(t1) || ![st.t1, st.t2].includes(t2)) continue;
-        if (st.status === 'done' && !_autoSynced.has(id)) break;
+        if (st.status === 'done' && !_autoSynced.has(id)) break; // respecte un done manuel
         const ns1 = byName[st.t1], ns2 = byName[st.t2];
         if (ns1 === undefined || ns2 === undefined) break;
-        // En KO, ne finalise pas un nul (prolongation/tirs au but) → reste live
-        const newStatus = (state === 'post' && ns1 !== ns2) ? 'done' : 'live';
-        if (String(st.s1) !== String(ns1) || String(st.s2) !== String(ns2) || st.status !== newStatus) {
-          st.s1 = ns1; st.s2 = ns2; st.status = newStatus;
+        const newStatus = state === 'post' ? 'done' : 'live';
+        // Vainqueur : ESPN si dispo (gère prolongation/tirs au but), sinon score
+        const nWin = newStatus === 'done' ? (winName || (ns1 > ns2 ? st.t1 : ns2 > ns1 ? st.t2 : '')) : '';
+        const nso1 = hasSO ? (soByName[st.t1] != null ? soByName[st.t1] : '') : '';
+        const nso2 = hasSO ? (soByName[st.t2] != null ? soByName[st.t2] : '') : '';
+        const changed = String(st.s1) !== String(ns1) || String(st.s2) !== String(ns2)
+          || st.status !== newStatus || (st.winner || '') !== nWin
+          || String(st.so1 == null ? '' : st.so1) !== String(nso1)
+          || String(st.so2 == null ? '' : st.so2) !== String(nso2);
+        if (changed) {
+          st.s1 = ns1; st.s2 = ns2; st.winner = nWin; st.so1 = nso1; st.so2 = nso2; st.status = newStatus;
           _autoSynced.add(id);
-          buildBracket();
+          buildBracket();           // propage les vainqueurs (advanceKnockout) + rerend
           if (typeof saveData === 'function') saveData();
-          if (typeof toast === 'function') toast(`🔄 Sync ${t1} ${ns1}–${ns2} ${t2}`, state === 'post' ? 'done' : 'live', '🔄', 2500);
+          if (typeof checkChampion === 'function') checkChampion();
+          const soTxt = (hasSO && nso1 !== '' && nso2 !== '') ? ` (${nso1}-${nso2} t.a.b.)` : '';
+          if (typeof toast === 'function') toast(`🔄 Sync ${st.t1} ${ns1}–${ns2}${soTxt} ${st.t2}`, newStatus === 'done' ? 'done' : 'live', '🔄', 2800);
         }
         break;
       }

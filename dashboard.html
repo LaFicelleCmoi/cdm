@@ -20,7 +20,8 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=3"></script>
+<script src="i18n.js?v=4"></script>
+<script src="events.js?v=1"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -431,6 +432,9 @@ body {
 .pc-res-chip.res-d { color: var(--muted); border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); }
 .pc-res-chip.res-l { color: var(--red); border-color: rgba(255,71,87,0.45); background: rgba(255,71,87,0.12); }
 .pc-res-chip.is-live { animation: pulse 1.4s infinite; }
+.pc-scorers { font-size: 0.74em; color: #cdd6e0; line-height: 1.45; margin-top: 10px; }
+.pc-scorers-label { color: var(--gold); font-weight: 800; }
+.pc-scorers:empty { display: none; }
 
 .pc-cta { pointer-events: auto; margin-top: 16px; display: inline-block; text-decoration: none; font-size: 0.7em; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #000; background: var(--gold); padding: 10px 18px; border-radius: 10px; transition: transform 0.18s, box-shadow 0.18s; }
 .pc-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(251,197,49,0.35); }
@@ -682,7 +686,7 @@ function getTeamResults(frTeam) {
     if (!opp || !opp.team) continue;
     const gf = parseInt(me.score), ga = parseInt(opp.score);
     if (isNaN(gf) || isNaN(ga)) continue;
-    out.push({ opp: frName(opp.team.displayName), gf, ga, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', live: state === 'in', date: ev.date });
+    out.push({ id: ev.id, opp: frName(opp.team.displayName), gf, ga, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', live: state === 'in', date: ev.date });
   }
   out.sort((a, b) => new Date(a.date) - new Date(b.date));
   return out;
@@ -692,7 +696,7 @@ function getTeamResults(frTeam) {
 // matches the rest of the dashboard. Falls back to the English name if missing.
 const teamNameEnFr = {
   'Mexico': 'Mexique', 'South Africa': 'Afrique du Sud', 'South Korea': 'Corée du Sud', 'Korea Republic': 'Corée du Sud', 'Czech Republic': 'Tchéquie', 'Czechia': 'Tchéquie',
-  'Canada': 'Canada', 'Bosnia and Herzegovina': 'Bosnie-Herzégovine', 'Bosnia & Herzegovina': 'Bosnie-Herzégovine', 'Qatar': 'Qatar', 'Switzerland': 'Suisse',
+  'Canada': 'Canada', 'Bosnia-Herzegovina': 'Bosnie-Herzégovine', 'Bosnia and Herzegovina': 'Bosnie-Herzégovine', 'Bosnia & Herzegovina': 'Bosnie-Herzégovine', 'Qatar': 'Qatar', 'Switzerland': 'Suisse',
   'Brazil': 'Brésil', 'Morocco': 'Maroc', 'Haiti': 'Haïti', 'Scotland': 'Écosse',
   'United States': 'États-Unis', 'USA': 'États-Unis', 'Paraguay': 'Paraguay', 'Australia': 'Australie', 'Turkey': 'Turquie', 'Türkiye': 'Turquie',
   'Germany': 'Allemagne', 'Curacao': 'Curaçao', 'Curaçao': 'Curaçao', 'Ivory Coast': "Côte d'Ivoire", 'Côte d’Ivoire': "Côte d'Ivoire", 'Ecuador': 'Équateur',
@@ -1182,8 +1186,10 @@ function renderCountryResults(name) {
         <div class="pc-opp-label">${window.t('results_label')}</div>
         <div class="pc-res-summary"><b>${w}</b>${window.t('res_w')} · <b>${d}</b>${window.t('res_d')} · <b>${l}</b>${window.t('res_l')}</div>
         <div class="pc-res-row">${chips}</div>
+        <div class="pc-scorers" id="pc-scorers"></div>
         ${cta}
       </div>`;
+    loadCountryScorers(name, results); // buteurs (async, via events.js)
   } else {
     const opponents = (WC_GROUPS[group] || []).filter(t => t !== name);
     const oppHTML = opponents.map(o => `
@@ -1198,6 +1204,36 @@ function renderCountryResults(name) {
         ${cta}
       </div>`;
   }
+}
+
+// Buteurs de l'équipe (async) : agrège les buts de ses matchs + tooltips par match
+async function loadCountryScorers(name, results) {
+  if (!window.MatchEvents) return;
+  const tally = {}; const perMatch = [];
+  for (let i = 0; i < results.length; i++) {
+    let scorers = [];
+    try {
+      const list = await MatchEvents.fetch(results[i].id);
+      scorers = list.filter(e => ['goal', 'pen'].includes(e.kind) && frName(e.team) === name);
+    } catch (e) {}
+    perMatch[i] = scorers;
+    scorers.forEach(s => { if (s.player) tally[s.player] = (tally[s.player] || 0) + 1; });
+  }
+  // carte changée entre-temps ? on abandonne
+  const card = document.querySelector('.pixel-card[data-country]');
+  if (!card || card.dataset.country !== name) return;
+  // tooltip par chip : ajoute les buteurs du match
+  const chips = document.querySelectorAll('#pc-bottom .pc-res-chip');
+  perMatch.forEach((sc, i) => {
+    if (chips[i] && sc.length) chips[i].title += ' — ' + sc.map(s => `${MatchEvents.lastName(s.player)} ${s.clock}${s.kind === 'pen' ? ' (pen)' : ''}`).join(', ');
+  });
+  // ligne agrégée
+  const el = document.getElementById('pc-scorers');
+  if (!el) return;
+  const entries = Object.entries(tally).sort((a, b) => b[1] - a[1]);
+  if (!entries.length) { el.innerHTML = ''; return; }
+  const txt = entries.map(([p, c]) => `${MatchEvents.lastName(p)}${c > 1 ? ' ×' + c : ''}`).join(' · ');
+  el.innerHTML = `<span class="pc-scorers-label">⚽ ${window.t('scorers_label')}</span> ${escapeHTML(txt)}`;
 }
 
 function openCountryCard(name) {

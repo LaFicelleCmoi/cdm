@@ -16,12 +16,12 @@
   /* Fond TRANSPARENT : indispensable pour OBS (Browser Source) */
   html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; font-family: var(--font-b); -webkit-font-smoothing: antialiased; }
 
-  /* Conteneur ancré dans un coin (réglable via ?pos=) */
-  #bug { position: fixed; transform-origin: top left; }
-  #bug.top-left     { top: 18px; left: 18px; transform-origin: top left; }
-  #bug.top-right    { top: 18px; right: 18px; transform-origin: top right; }
-  #bug.bottom-left  { bottom: 18px; left: 18px; transform-origin: bottom left; }
-  #bug.bottom-right { bottom: 18px; right: 18px; transform-origin: bottom right; }
+  /* Conteneur ancré dans un coin (réglable via ?pos=) — colonne : scorebug puis feed dessous */
+  #bug { position: fixed; display: inline-flex; flex-direction: column; gap: 6px; transform-origin: top left; }
+  #bug.top-left     { top: 18px; left: 18px; align-items: flex-start; transform-origin: top left; }
+  #bug.top-right    { top: 18px; right: 18px; align-items: flex-end; transform-origin: top right; }
+  #bug.bottom-left  { bottom: 18px; left: 18px; align-items: flex-start; transform-origin: bottom left; }
+  #bug.bottom-right { bottom: 18px; right: 18px; align-items: flex-end; transform-origin: bottom right; }
 
   .scorebug {
     display: inline-flex; align-items: stretch;
@@ -61,6 +61,23 @@
   @keyframes goalflash { 0%,100%{box-shadow:0 8px 28px rgba(0,0,0,.55)} 30%{box-shadow:0 0 0 3px var(--gold), 0 8px 34px rgba(251,197,49,.6)} }
 
   .sb-extra { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.45); padding: 9px 11px; align-self: center; }
+
+  /* Ligne d'événement (buteur / carton / penalty) sous le scorebug */
+  .sb-feed {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: rgba(11,17,23,0.92); border: 1px solid rgba(255,255,255,0.08);
+    border-radius: 8px; padding: 6px 12px; max-width: 100%;
+    opacity: 0; transform: translateY(-6px); transition: opacity .3s, transform .3s;
+    font-size: 14px; font-weight: 700; color: var(--white);
+  }
+  .sb-feed.show { opacity: 1; transform: translateY(0); }
+  .sb-feed.flash { animation: feedflash 1.2s ease; }
+  @keyframes feedflash { 0%,100%{ box-shadow:0 0 0 0 rgba(251,197,49,0) } 30%{ box-shadow:0 0 0 3px var(--gold) } }
+  .sb-feed .fe-emoji { font-size: 16px; }
+  .sb-feed .fe-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
+  .sb-feed.red .fe-clock { color: var(--red); }
+  .sb-feed .fe-player { color: #fff; }
+  .sb-feed .fe-tag { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: .04em; }
 </style>
 </head>
 <body>
@@ -114,8 +131,63 @@
     });
   };
 
+  /* ---- Événements du match (buteurs/cartons/penalty) — inline, autonome ---- */
+  const SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
+  const evCache = {}; // id -> {ts, list}
+  const feedSig = {}; // id -> signature du dernier event affiché
+  const FEED_EMOJI = { goal: '⚽', pen: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨' };
+  const FEED_TAG = { pen: 'PEN', owngoal: 'CSC', penmiss: 'PEN ✗' };
+  function evKind(t) {
+    if (!t) return 'other';
+    if (t === 'Own Goal') return 'owngoal';
+    if (/penalty/i.test(t) && /miss|saved/i.test(t)) return 'penmiss';
+    if (/penalty/i.test(t) && /scor/i.test(t)) return 'pen';
+    if (/^goal/i.test(t)) return 'goal';
+    if (/red/i.test(t)) return 'red';
+    if (/yellow/i.test(t)) return 'yellow';
+    return 'other';
+  }
+  const lastName = (f) => { if (!f) return ''; const p = f.trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : f; };
+  async function fetchEv(id) {
+    const c = evCache[id];
+    if (c && Date.now() - c.ts < 12000) return c.list;
+    try {
+      const r = await fetch(SUMMARY + id, { cache: 'no-store' });
+      if (!r.ok) throw 0;
+      const d = await r.json();
+      const list = (d.keyEvents || []).map(k => ({
+        kind: evKind((k.type || {}).text),
+        clock: (k.clock || {}).displayValue || '',
+        player: ((k.participants || [])[0] || {}).athlete ? k.participants[0].athlete.displayName : '',
+      })).filter(e => FEED_EMOJI[e.kind]);
+      evCache[id] = { ts: Date.now(), list };
+      return list;
+    } catch (e) { return (c && c.list) || []; }
+  }
+  function feedEl() {
+    let f = bug.querySelector('.sb-feed');
+    if (!f) { f = document.createElement('div'); f.className = 'sb-feed'; bug.appendChild(f); }
+    return f;
+  }
+  async function updateFeed(ev) {
+    const f = bug.querySelector('.sb-feed');
+    const state = ev && ev.competitions[0].status.type.state;
+    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); return; }
+    const list = await fetchEv(ev.id);
+    const last = list[list.length - 1]; // le plus récent
+    if (!last) { if (f) f.classList.remove('show'); return; }
+    const el = feedEl();
+    const sig = `${last.kind}|${last.clock}|${last.player}`;
+    const isNew = feedSig[ev.id] && feedSig[ev.id] !== sig;
+    el.className = 'sb-feed show' + (last.kind === 'red' ? ' red' : '') + (isNew ? ' flash' : '');
+    const tag = FEED_TAG[last.kind] ? `<span class="fe-tag">${FEED_TAG[last.kind]}</span>` : '';
+    el.innerHTML = `<span class="fe-emoji">${FEED_EMOJI[last.kind]}</span><span class="fe-clock">${esc(last.clock)}</span><span class="fe-player">${esc(lastName(last.player))}</span>${tag}`;
+    if (isNew) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
+    feedSig[ev.id] = sig;
+  }
+
   function render(ev) {
-    if (!ev) { bug.querySelector('.scorebug')?.classList.remove('show'); if (HIDE_EMPTY) bug.innerHTML = ''; return; }
+    if (!ev) { bug.querySelector('.scorebug')?.classList.remove('show'); bug.querySelector('.sb-feed')?.classList.remove('show'); if (HIDE_EMPTY) bug.innerHTML = ''; return; }
     const comp = ev.competitions[0];
     const t = comp.status.type;
     const state = t.state; // pre | in | post
@@ -133,8 +205,11 @@
     let card = bug.querySelector('.scorebug');
     const fresh = !card || card.dataset.id !== ev.id;
     if (fresh) {
-      bug.innerHTML = `
-        <div class="scorebug state-${state}" data-id="${ev.id}">
+      if (card) card.remove();
+      card = document.createElement('div');
+      card.className = `scorebug state-${state}`;
+      card.dataset.id = ev.id;
+      card.innerHTML = `
           <div class="sb-team">
             ${logo(home) ? `<img class="sb-logo" src="${logo(home)}" alt="">` : ''}
             <span class="sb-abbr">${esc(abbr(home))}</span>
@@ -146,9 +221,8 @@
             ${logo(away) ? `<img class="sb-logo" src="${logo(away)}" alt="">` : ''}
             <span class="sb-abbr">${esc(abbr(away))}</span>
           </div>
-          <div class="sb-status ${statusCls}">${statusCls === 'pre' ? '🕐' : '<span class="sb-dot"></span>'} ${esc(statusTxt)}</div>
-        </div>`;
-      card = bug.querySelector('.scorebug');
+          <div class="sb-status ${statusCls}">${statusCls === 'pre' ? '🕐' : '<span class="sb-dot"></span>'} ${esc(statusTxt)}</div>`;
+      bug.insertBefore(card, bug.firstChild); // scorebug en premier (le feed reste sous, ou au-dessus en bas via CSS)
       requestAnimationFrame(() => card.classList.add('show'));
     } else {
       // mise à jour en place (pas de re-création → pas de clignotement)
@@ -167,6 +241,8 @@
       card.querySelectorAll('.v').forEach(v => { v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump'); });
     }
     lastScore[ev.id] = key;
+
+    updateFeed(ev); // buteurs / cartons / penalty sous le score
   }
 
   function pickAndRender(events) {
