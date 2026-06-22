@@ -9,7 +9,7 @@
 <style>
   :root {
     --gold: #fbc531; --red: #ff4757; --green: #2ed573; --white: #f2f6fa;
-    --bg: rgba(11, 17, 23, 0.92);
+    --bg: #0b1117;
     --font-d: 'Bebas Neue', Impact, sans-serif;
     --font-b: 'Inter', system-ui, sans-serif;
   }
@@ -72,7 +72,7 @@
   /* Ligne d'événement (buteur / carton / penalty) sous le scorebug */
   .sb-feed {
     display: inline-flex; align-items: center; gap: 8px;
-    background: rgba(11,17,23,0.92); border: 1px solid rgba(255,255,255,0.08);
+    background: var(--bg); border: 1px solid rgba(255,255,255,0.08);
     border-radius: 8px; padding: 6px 12px; max-width: 100%;
     opacity: 0; transform: translateY(-6px); transition: opacity .3s, transform .3s;
     font-size: 14px; font-weight: 700; color: var(--white);
