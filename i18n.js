@@ -47,7 +47,7 @@
       th_team: 'Équipe', th_mp: 'MJ', th_w: 'G', th_d: 'N', th_l: 'P', th_gf: 'BP', th_ga: 'BC', th_gd: 'DB', th_pts: 'Pts', th_last5: '5 derniers',
       /* Bracket */
       bracket_title: 'Phase Finale',
-      bracket_subtitle: 'Cliquez sur un match pour modifier · 🔴 En cours = score affiché mais non comptabilisé · ✅ Terminé = pris en compte',
+      bracket_subtitle: '🔒 Scores synchronisés en direct depuis l\'API · 🔴 En cours · ✅ Terminé · le bracket se remplit tout seul',
       view_cards: '🃏 Vue cartes', view_tree: '🌳 Vue arbre',
       round_r16: '16es de finale', round_r8: '8es de finale', round_qf: 'Quarts de finale', round_sf: 'Demi-finales', round_final: 'Finale',
       third_place: '🥉 Match pour la 3e place',
@@ -107,7 +107,7 @@
       th_team: 'Team', th_mp: 'MP', th_w: 'W', th_d: 'D', th_l: 'L', th_gf: 'GF', th_ga: 'GA', th_gd: 'GD', th_pts: 'Pts', th_last5: 'Last 5',
       /* Bracket */
       bracket_title: 'Knockout Stage',
-      bracket_subtitle: 'Click a match to edit · 🔴 Live = score shown but not counted · ✅ Finished = counted',
+      bracket_subtitle: '🔒 Scores synced live from the API · 🔴 Live · ✅ Finished · the bracket fills itself',
       view_cards: '🃏 Card view', view_tree: '🌳 Tree view',
       round_r16: 'Round of 32', round_r8: 'Round of 16', round_qf: 'Quarter-finals', round_sf: 'Semi-finals', round_final: 'Final',
       third_place: '🥉 Third-place match',
