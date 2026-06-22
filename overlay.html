@@ -141,7 +141,11 @@
   /* ---- Événements du match (buteurs/cartons/penalty) — inline, autonome ---- */
   const SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
   const evCache = {}; // id -> {ts, list}
-  const feedSig = {}; // id -> signature du dernier event affiché
+  // --- Feed dynamique : défilement des événements récents ---
+  const FEED_ROTATE_MS = 4500;  // durée d'affichage par événement
+  const MAX_FEED = 6;           // ne fait défiler que les N plus récents
+  let feedItems = [], feedPos = 0, feedTimer = null, feedMatchId = null, feedKnownSig = '';
+  const sigOf = (e) => `${e.kind}|${e.clock}|${e.player}`;
   const FEED_EMOJI = { goal: '⚽', pen: '⚽', freekick: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨' };
   const FEED_TAG = { pen: 'PEN', freekick: 'CF', owngoal: 'CSC', penmiss: 'PEN ✗' };
   function evKind(t) {
@@ -206,22 +210,53 @@
     fill('away', away);
   }
 
+  function renderFeedItem(item, flash) {
+    const el = feedEl();
+    if (!item) { el.classList.remove('show'); return; }
+    const tag = FEED_TAG[item.kind] ? `<span class="fe-tag">${FEED_TAG[item.kind]}</span>` : '';
+    el.innerHTML = `<span class="fe-emoji">${FEED_EMOJI[item.kind]}</span><span class="fe-clock">${esc(item.clock)}</span><span class="fe-player">${esc(lastName(item.player))}</span>${tag}`;
+    el.className = 'sb-feed show' + (item.kind === 'red' ? ' red' : '');
+    if (flash) { void el.offsetWidth; el.classList.add('flash'); }
+  }
+  function stopFeedRotation() { if (feedTimer) { clearInterval(feedTimer); feedTimer = null; } }
+  function startFeedRotation() {
+    stopFeedRotation();
+    if (feedItems.length <= 1) return; // rien à faire défiler
+    feedTimer = setInterval(() => {
+      if (feedItems.length <= 1) return;
+      feedPos = (feedPos + 1) % feedItems.length;
+      renderFeedItem(feedItems[feedPos], false);
+    }, FEED_ROTATE_MS);
+  }
+
+  // Feed dynamique : fait défiler les événements récents ; priorité + flash sur un nouvel événement
   async function updateFeed(ev) {
     const f = bug.querySelector('.sb-feed');
     const state = ev && ev.competitions[0].status.type.state;
-    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); return; }
+    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); feedItems = []; feedMatchId = null; stopFeedRotation(); return; }
     const list = await fetchEv(ev.id);
     paintCards(list, ev); // rappel cartons par équipe
-    const last = list[list.length - 1]; // le plus récent
-    if (!last) { if (f) f.classList.remove('show'); return; }
-    const el = feedEl();
-    const sig = `${last.kind}|${last.clock}|${last.player}`;
-    const isNew = feedSig[ev.id] && feedSig[ev.id] !== sig;
-    el.className = 'sb-feed show' + (last.kind === 'red' ? ' red' : '') + (isNew ? ' flash' : '');
-    const tag = FEED_TAG[last.kind] ? `<span class="fe-tag">${FEED_TAG[last.kind]}</span>` : '';
-    el.innerHTML = `<span class="fe-emoji">${FEED_EMOJI[last.kind]}</span><span class="fe-clock">${esc(last.clock)}</span><span class="fe-player">${esc(lastName(last.player))}</span>${tag}`;
-    if (isNew) { el.classList.remove('flash'); void el.offsetWidth; el.classList.add('flash'); }
-    feedSig[ev.id] = sig;
+    const items = (list || []).slice(-MAX_FEED); // N plus récents (déjà filtrés "feed")
+    if (!items.length) { if (f) f.classList.remove('show'); feedItems = []; stopFeedRotation(); return; }
+
+    const newestSig = sigOf(items[items.length - 1]);
+    const matchChanged = feedMatchId !== ev.id;
+    feedItems = items;
+    feedMatchId = ev.id;
+
+    if (matchChanged) {
+      feedPos = items.length - 1;
+      feedKnownSig = newestSig;
+      renderFeedItem(items[feedPos], false);
+      startFeedRotation();
+    } else if (newestSig !== feedKnownSig) {
+      feedKnownSig = newestSig;          // nouvel événement → on le met en avant
+      feedPos = items.length - 1;
+      renderFeedItem(items[feedPos], true);
+      startFeedRotation();               // relance le cycle pour le laisser à l'écran
+    } else if (!feedTimer) {
+      startFeedRotation();               // s'assure que le défilement tourne
+    }
   }
 
   function render(ev) {
