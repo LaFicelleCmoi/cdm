@@ -56,11 +56,7 @@
   .sb-sep { opacity: .35; }
   @keyframes bump { 0%{transform:scale(1)} 40%{transform:scale(1.5); color:var(--gold)} 100%{transform:scale(1)} }
 
-  .sb-status { display: flex; align-items: center; gap: 7px; padding: 9px 13px; font-size: 14px; font-weight: 800; letter-spacing: 0.03em; color: var(--gold); white-space: nowrap; }
-  .sb-status.live { color: var(--red); }
-  .sb-status.post { color: var(--green); }
-  .sb-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
-  .sb-status.live .sb-dot { animation: pulse 1.2s infinite; }
+  .sb-status { display: flex; align-items: center; padding: 9px 14px; font-size: 15px; font-weight: 800; letter-spacing: 0.02em; color: var(--white); white-space: nowrap; font-variant-numeric: tabular-nums; }
   @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,71,87,.5)} 50%{box-shadow:0 0 0 6px rgba(255,71,87,0)} }
 
   /* Flash "BUT !" quand un score augmente */
@@ -248,6 +244,7 @@
       card.className = `scorebug state-${state}`;
       card.dataset.id = ev.id;
       card.innerHTML = `
+          <div class="sb-status ${statusCls}">${esc(statusTxt)}</div>
           <div class="sb-team">
             ${logo(home) ? `<img class="sb-logo" src="${logo(home)}" alt="">` : ''}
             <span class="sb-tcol"><span class="sb-abbr">${esc(abbr(home))}</span><span class="sb-cards" data-side="home"></span></span>
@@ -258,8 +255,7 @@
           <div class="sb-team rev">
             ${logo(away) ? `<img class="sb-logo" src="${logo(away)}" alt="">` : ''}
             <span class="sb-tcol"><span class="sb-abbr">${esc(abbr(away))}</span><span class="sb-cards" data-side="away"></span></span>
-          </div>
-          <div class="sb-status ${statusCls}">${statusCls === 'pre' ? '🕐' : '<span class="sb-dot"></span>'} ${esc(statusTxt)}</div>`;
+          </div>`;
       bug.insertBefore(card, bug.firstChild); // scorebug en premier (le feed reste sous, ou au-dessus en bas via CSS)
       requestAnimationFrame(() => card.classList.add('show'));
     } else {
@@ -269,7 +265,7 @@
       card.querySelector('[data-s="a"]').textContent = as;
       const st = card.querySelector('.sb-status');
       st.className = `sb-status ${statusCls}`;
-      st.innerHTML = `${statusCls === 'pre' ? '🕐' : '<span class="sb-dot"></span>'} ${esc(statusTxt)}`;
+      st.textContent = esc(statusTxt);
     }
 
     // détection de but → flash + bump
