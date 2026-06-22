@@ -1163,7 +1163,7 @@ const rounds = [
 ];
 
 rounds.forEach(r => r.matches.forEach(m => {
-  koState[m.id] = { t1:m.t1, orig_t1:m.t1, t2:m.t2, orig_t2:m.t2, s1:'', s2:'', status:'pending', winner:'', so1:'', so2:'' };
+  koState[m.id] = { t1:m.t1, orig_t1:m.t1, t2:m.t2, orig_t2:m.t2, s1:'', s2:'', status:'pending', winner:'', so1:'', so2:'', synced:false };
 }));
 
 function updateKnockoutStage() {
@@ -1520,29 +1520,37 @@ function openModal(id, label, headerCls) {
   document.getElementById('modal-title').textContent = label;
   document.getElementById('modal-t1').value = st.t1;
   document.getElementById('modal-t2').value = st.t2;
-  document.getElementById('modal-t1').readOnly = false;
-  document.getElementById('modal-t2').readOnly = false;
-
   document.getElementById('modal-s1').value = st.s1;
   document.getElementById('modal-s2').value = st.s2;
   document.getElementById('modal-header').className = 'modal-header '+(headerCls||'');
 
-  // Restaure le mode éditable (la modale est partagée avec les poules en lecture seule)
-  document.getElementById('modal-s1').readOnly = false;
-  document.getElementById('modal-s2').readOnly = false;
-  document.getElementById('state-panel-wrapper').style.display = '';
-  document.getElementById('modal-confirm-btn').style.display = '';
-  document.getElementById('modal-cancel-btn').textContent = window.t('btn_cancel');
+  // Match réel synchronisé depuis l'API → lecture seule (scores sécurisés).
+  // Les matchs non synchronisés restent éditables pour la simulation.
+  const locked = !!st.synced;
+  document.getElementById('modal-t1').readOnly = locked;
+  document.getElementById('modal-t2').readOnly = locked;
+  document.getElementById('modal-s1').readOnly = locked;
+  document.getElementById('modal-s2').readOnly = locked;
+  document.getElementById('state-panel-wrapper').style.display = locked ? 'none' : '';
+  document.getElementById('modal-confirm-btn').style.display = locked ? 'none' : '';
+  document.getElementById('modal-cancel-btn').textContent = locked ? window.t('btn_close') : window.t('btn_cancel');
 
   modalStatus = st.status;
   selectStatus(st.status);
 
   const hint = document.getElementById('modal-hint');
   hint.className = 'modal-hint';
-  hint.textContent = '';
+  if (locked) {
+    const stTxt = st.status === 'live' ? window.t('match_live_txt') : st.status === 'done' ? window.t('match_done_txt') : window.t('match_pre_txt');
+    const soTxt = (st.so1 !== '' && st.so2 !== '' && st.so1 != null && st.so2 != null) ? `<br>🥅 Tirs au but : ${st.so1}–${st.so2}` : '';
+    hint.innerHTML = `${window.t('sync_lock_hint')}<br>${stTxt}${soTxt}`;
+    hint.style.color = 'var(--muted)';
+  } else {
+    hint.textContent = '';
+  }
 
   document.getElementById('modal-backdrop').classList.add('open');
-  setTimeout(()=>document.getElementById('modal-s1').focus(),50);
+  if (!locked) setTimeout(()=>document.getElementById('modal-s1').focus(),50);
 }
 
 function openGroupModal(g, mn, t1Name, t2Name, isReversed) {
@@ -1593,6 +1601,7 @@ function saveModal() {
   if(!currentMatchId) { closeModal(); return; } 
   
   if (editingType === 'ko') {
+      if(koState[currentMatchId] && koState[currentMatchId].synced) { closeModal(); return; } // score API verrouillé
       if(!calcKo(currentMatchId)) return;
       const st = koState[currentMatchId];
       st.t1 = document.getElementById('modal-t1').value;
@@ -2052,7 +2061,8 @@ checkChampion();
       for (const id in koState) {
         const st = koState[id];
         if (![st.t1, st.t2].includes(t1) || ![st.t1, st.t2].includes(t2)) continue;
-        if (st.status === 'done' && !_autoSynced.has(id)) break; // respecte un done manuel
+        // Respecte un done saisi manuellement, mais garde la main sur un match API
+        if (st.status === 'done' && !_autoSynced.has(id) && !st.synced) break;
         const ns1 = byName[st.t1], ns2 = byName[st.t2];
         if (ns1 === undefined || ns2 === undefined) break;
         const newStatus = state === 'post' ? 'done' : 'live';
@@ -2066,6 +2076,7 @@ checkChampion();
           || String(st.so2 == null ? '' : st.so2) !== String(nso2);
         if (changed) {
           st.s1 = ns1; st.s2 = ns2; st.winner = nWin; st.so1 = nso1; st.so2 = nso2; st.status = newStatus;
+          st.synced = true;         // match réel : verrouille l'édition manuelle
           _autoSynced.add(id);
           buildBracket();           // propage les vainqueurs (advanceKnockout) + rerend
           if (typeof saveData === 'function') saveData();
