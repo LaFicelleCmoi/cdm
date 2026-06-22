@@ -21,7 +21,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="i18n.js?v=5"></script>
-<script src="events.js?v=1"></script>
+<script src="events.js?v=2"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -1214,7 +1214,7 @@ async function loadCountryScorers(name, results) {
     let scorers = [];
     try {
       const list = await MatchEvents.fetch(results[i].id);
-      scorers = list.filter(e => ['goal', 'pen'].includes(e.kind) && frName(e.team) === name);
+      scorers = list.filter(e => ['goal', 'pen', 'freekick'].includes(e.kind) && frName(e.team) === name);
     } catch (e) {}
     perMatch[i] = scorers;
     scorers.forEach(s => { if (s.player) tally[s.player] = (tally[s.player] || 0) + 1; });

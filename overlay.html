@@ -142,13 +142,14 @@
   const SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
   const evCache = {}; // id -> {ts, list}
   const feedSig = {}; // id -> signature du dernier event affiché
-  const FEED_EMOJI = { goal: '⚽', pen: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨' };
-  const FEED_TAG = { pen: 'PEN', owngoal: 'CSC', penmiss: 'PEN ✗' };
+  const FEED_EMOJI = { goal: '⚽', pen: '⚽', freekick: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨' };
+  const FEED_TAG = { pen: 'PEN', freekick: 'CF', owngoal: 'CSC', penmiss: 'PEN ✗' };
   function evKind(t) {
     if (!t) return 'other';
     if (t === 'Own Goal') return 'owngoal';
     if (/penalty/i.test(t) && /miss|saved/i.test(t)) return 'penmiss';
     if (/penalty/i.test(t) && /scor/i.test(t)) return 'pen';
+    if (/free.?kick/i.test(t)) return 'freekick';
     if (/^goal/i.test(t)) return 'goal';
     if (/red/i.test(t)) return 'red';
     if (/yellow/i.test(t)) return 'yellow';

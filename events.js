@@ -13,6 +13,7 @@
     if (t === 'Own Goal') return 'owngoal';
     if (/penalty/i.test(t) && /miss|saved|fail/i.test(t)) return 'penmiss';
     if (/penalty/i.test(t) && /scor/i.test(t)) return 'pen';
+    if (/free.?kick/i.test(t)) return 'freekick';
     if (/^goal/i.test(t)) return 'goal';
     if (/red/i.test(t)) return 'red';
     if (/yellow/i.test(t)) return 'yellow';
@@ -52,9 +53,10 @@
     } catch (e) { return (c && c.list) || []; }
   }
 
-  const EMOJI = { goal: '⚽', pen: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨', sub: '🔁', other: '•' };
-  const NOTABLE = ['goal', 'pen', 'owngoal', 'penmiss', 'red', 'yellow'];
-  const GOALISH = ['goal', 'pen', 'owngoal'];
+  const EMOJI = { goal: '⚽', pen: '⚽', freekick: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨', sub: '🔁', other: '•' };
+  const NOTABLE = ['goal', 'pen', 'freekick', 'owngoal', 'penmiss', 'red', 'yellow'];
+  const GOALISH = ['goal', 'pen', 'freekick', 'owngoal'];
+  const TAG = { pen: 'pen', freekick: 'cf', owngoal: 'csc', penmiss: 'pen ✗' };
 
   // Nom de famille seul (compact) : "Raúl Jiménez" → "Jiménez"
   function lastName(full) {
@@ -71,5 +73,6 @@
     notable: (list) => (list || []).filter(e => NOTABLE.includes(e.kind)),
     goals: (list) => (list || []).filter(e => GOALISH.includes(e.kind)),
     isGoal: (e) => GOALISH.includes(e.kind),
+    tag: (e) => TAG[e && e.kind] || '',
   };
 })();
