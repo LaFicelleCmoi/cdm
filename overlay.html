@@ -41,6 +41,13 @@
   .sb-team.rev { flex-direction: row-reverse; }
   .sb-logo { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
   .sb-abbr { font-size: 18px; font-weight: 800; letter-spacing: 0.04em; color: var(--white); }
+  /* Rappel cartons jaunes/rouges, par équipe, sous l'abréviation */
+  .sb-tcol { display: flex; flex-direction: column; gap: 2px; }
+  .sb-team.rev .sb-tcol { align-items: flex-end; }
+  .sb-cards { display: none; font-size: 11px; font-weight: 800; line-height: 1; }
+  .sb-cards.show { display: flex; gap: 5px; }
+  .sb-cards .sc-y { color: #ffcf33; }
+  .sb-cards .sc-r { color: var(--red); }
 
   .sb-score { display: flex; align-items: center; gap: 9px; padding: 6px 15px; background: rgba(0,0,0,0.32); font-family: var(--font-d); font-size: 32px; line-height: 1; color: #fff; }
   .sb-score .v { min-width: 18px; text-align: center; transition: transform .3s, color .3s; }
@@ -159,6 +166,7 @@
         kind: evKind((k.type || {}).text),
         clock: (k.clock || {}).displayValue || '',
         player: ((k.participants || [])[0] || {}).athlete ? k.participants[0].athlete.displayName : '',
+        team: (k.team || {}).displayName || '',
       })).filter(e => FEED_EMOJI[e.kind]);
       evCache[id] = { ts: Date.now(), list };
       return list;
@@ -169,11 +177,40 @@
     if (!f) { f = document.createElement('div'); f.className = 'sb-feed'; bug.appendChild(f); }
     return f;
   }
+  function clearCards() {
+    bug.querySelectorAll('.sb-cards').forEach(s => { s.innerHTML = ''; s.classList.remove('show'); });
+  }
+  // Rappel cartons jaunes/rouges par équipe sous chaque équipe du scorebug
+  function paintCards(list, ev) {
+    const cs = ev.competitions[0].competitors || [];
+    const home = cs.find(c => c.homeAway === 'home') || cs[0];
+    const away = cs.find(c => c.homeAway === 'away') || cs[1];
+    const tally = {};
+    (list || []).forEach(e => {
+      if (e.kind !== 'yellow' && e.kind !== 'red') return;
+      (tally[e.team || ''] = tally[e.team || ''] || { yellow: 0, red: 0 })[e.kind]++;
+    });
+    const fill = (side, comp) => {
+      const span = bug.querySelector(`.sb-cards[data-side="${side}"]`);
+      if (!span) return;
+      const nm = comp && comp.team && comp.team.displayName;
+      const c = (nm && tally[nm]) || { yellow: 0, red: 0 };
+      let h = '';
+      if (c.yellow) h += `<span class="sc-y">🟨${c.yellow > 1 ? '×' + c.yellow : ''}</span>`;
+      if (c.red) h += `<span class="sc-r">🟥${c.red > 1 ? '×' + c.red : ''}</span>`;
+      span.innerHTML = h;
+      span.classList.toggle('show', !!h);
+    };
+    fill('home', home);
+    fill('away', away);
+  }
+
   async function updateFeed(ev) {
     const f = bug.querySelector('.sb-feed');
     const state = ev && ev.competitions[0].status.type.state;
-    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); return; }
+    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); return; }
     const list = await fetchEv(ev.id);
+    paintCards(list, ev); // rappel cartons par équipe
     const last = list[list.length - 1]; // le plus récent
     if (!last) { if (f) f.classList.remove('show'); return; }
     const el = feedEl();
@@ -212,14 +249,14 @@
       card.innerHTML = `
           <div class="sb-team">
             ${logo(home) ? `<img class="sb-logo" src="${logo(home)}" alt="">` : ''}
-            <span class="sb-abbr">${esc(abbr(home))}</span>
+            <span class="sb-tcol"><span class="sb-abbr">${esc(abbr(home))}</span><span class="sb-cards" data-side="home"></span></span>
           </div>
           <div class="sb-score">
             <span class="v" data-s="h">${esc(hs)}</span><span class="sb-sep">–</span><span class="v" data-s="a">${esc(as)}</span>
           </div>
           <div class="sb-team rev">
             ${logo(away) ? `<img class="sb-logo" src="${logo(away)}" alt="">` : ''}
-            <span class="sb-abbr">${esc(abbr(away))}</span>
+            <span class="sb-tcol"><span class="sb-abbr">${esc(abbr(away))}</span><span class="sb-cards" data-side="away"></span></span>
           </div>
           <div class="sb-status ${statusCls}">${statusCls === 'pre' ? '🕐' : '<span class="sb-dot"></span>'} ${esc(statusTxt)}</div>`;
       bug.insertBefore(card, bug.firstChild); // scorebug en premier (le feed reste sous, ou au-dessus en bas via CSS)
