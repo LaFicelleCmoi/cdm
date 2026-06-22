@@ -1,0 +1,1252 @@
+﻿<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Accueil — Dashboard CDM 2026</title>
+<meta name="description" content="Tracker et simulateur non officiel de la Coupe du Monde 2026 : scores en direct, classements des poules et phase finale.">
+<meta name="theme-color" content="#0b2216">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Global Dashboard — CDM 2026">
+<meta property="og:description" content="Scores en direct, classements et phase finale de la Coupe du Monde 2026. Projet de fan, non officiel.">
+<meta property="og:locale" content="fr_FR">
+<meta name="twitter:card" content="summary">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<!-- Day.js + plugins (dates, fuseaux, durées, temps relatif, locale FR) -->
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/utc.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
+<script src="i18n.js?v=3"></script>
+<style>
+:root {
+  --pitch:   #0b2216; 
+  --panel:   #0f1923;
+  --border:  rgba(255,255,255,0.1);
+  --gold:    #fbc531; 
+  --red:     #ff4757;
+  --white:   #f0f4f8;
+  --muted:   #8a9bb0;
+  --font-d:  'Bebas Neue', Impact, sans-serif;
+  --font-b:  'Inter', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: var(--font-b);
+  background: var(--pitch);
+  color: var(--white);
+  min-height: 100vh;
+  overflow-x: hidden;
+  padding: 40px 20px;
+  background-image:
+    repeating-linear-gradient(0deg, transparent, transparent 79px, rgba(255,255,255,0.02) 79px, rgba(255,255,255,0.02) 80px),
+    repeating-linear-gradient(90deg, transparent, transparent 79px, rgba(255,255,255,0.015) 79px, rgba(255,255,255,0.015) 80px);
+}
+
+.header { text-align: center; margin-bottom: 40px; position: relative; z-index: 10;}
+.header h1 { font-family: var(--font-d); font-size: clamp(3em, 8vw, 6em); line-height: 0.9; text-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+.header h1 span { color: var(--gold); }
+.header p { color: var(--muted); margin-top: 10px; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase;}
+
+.nav-forward {
+  position: absolute; top: 0; right: 20px;
+  color: #000; text-decoration: none; font-weight: 700; font-size: 0.7em; letter-spacing: 0.02em; text-transform: uppercase;
+  background: var(--gold); padding: 8px 16px; border-radius: 24px;
+  box-shadow: 0 0 14px rgba(251, 197, 49, 0.35); transition: all 0.2s;
+}
+.nav-forward:hover { transform: scale(1.05); box-shadow: 0 0 30px rgba(251, 197, 49, 0.6); }
+
+@keyframes pulse { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,71,87,0.4); } 50% { box-shadow: 0 0 0 10px rgba(255,71,87,0); } }
+
+/* SplitText hero — letter stagger */
+.hero-letter { display: inline-block; opacity: 0; transform: translateY(40px) rotateX(-90deg); animation: letterIn 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) forwards; transform-origin: 50% 100%; color: var(--white); }
+.hero-letter.gold { color: var(--gold) !important; }
+@keyframes letterIn { to { opacity: 1; transform: translateY(0) rotateX(0deg); } }
+@keyframes cardIn { to { opacity: 1; transform: translateY(0) scale(1); } }
+
+/* === LIVE SECTION (ESPN API) === */
+.live-section { max-width: 1200px; margin: 0 auto 30px; opacity: 0; transform: translateY(20px); animation: cardIn 0.8s 0.2s cubic-bezier(0.22,1,0.36,1) forwards; }
+.live-section-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; flex-wrap: wrap; gap: 10px; }
+.live-section-title { display: flex; align-items: center; gap: 12px; font-family: var(--font-d); font-size: 1.8em; letter-spacing: 0.05em; color: #fff; }
+.live-section-meta { font-size: 0.75em; font-weight: 600; color: var(--muted); letter-spacing: 0.08em; text-transform: uppercase; display: flex; align-items: center; gap: 8px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+.live-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  grid-auto-rows: minmax(160px, auto);
+  gap: 20px;
+  perspective: 1000px;
+}
+
+/* Bento sizing — same hierarchy as the main bento grid */
+.live-card.size-full     { grid-column: 1 / -1; grid-row: span 1; }
+.live-card.size-featured { grid-column: span 2; grid-row: span 2; }
+.live-card.size-wide     { grid-column: span 2; grid-row: span 1; }
+.live-card.size-small    { grid-column: span 1; grid-row: span 1; }
+/* Carte unique : passe en rangée horizontale pour ne pas être trop haute */
+.live-card.size-full { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 18px 28px; }
+.live-card.size-full .live-card-teams { flex: 1 1 320px; }
+.live-card.size-full .live-team-score { font-size: 2.6em; }
+
+.live-card {
+  background: rgba(15, 25, 35, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 20px 22px;
+  position: relative; overflow: hidden;
+  backdrop-filter: blur(12px);
+  transition: border-color 0.25s, box-shadow 0.25s;
+  display: flex; flex-direction: column; justify-content: space-between; gap: 14px;
+  opacity: 0; transform: translateY(15px); animation: cardIn 0.5s cubic-bezier(0.22,1,0.36,1) forwards;
+  --mouse-x: 50%; --mouse-y: 50%;
+}
+/* Magic glow border — gold radial following cursor, same as bento */
+.live-card::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; padding: 2px;
+  background: radial-gradient(400px circle at var(--mouse-x) var(--mouse-y), rgba(251,197,49,0.8), transparent 40%);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor; mask-composite: exclude;
+  pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 10;
+}
+.live-card::after {
+  content: ''; position: absolute; inset: 0; border-radius: inherit;
+  background: radial-gradient(600px circle at var(--mouse-x) var(--mouse-y), rgba(251,197,49,0.06), transparent 40%);
+  pointer-events: none; opacity: 0; transition: opacity 0.3s; z-index: 0;
+}
+.live-cards-grid:hover .live-card::before,
+.live-cards-grid:hover .live-card::after { opacity: 1; }
+
+.live-card.state-in { border-color: rgba(255,71,87,0.35); box-shadow: 0 0 22px rgba(255,71,87,0.1); }
+.live-card.state-pre { border-color: rgba(251,197,49,0.25); }
+.live-card.state-post { border-color: rgba(46,213,115,0.25); opacity: 0.92; }
+
+/* Live shimmer keeps for in-progress */
+.live-card.state-in .live-shimmer {
+  position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  background: linear-gradient(90deg, transparent, var(--red), transparent);
+  transform: translateX(-100%); animation: shimmer 2.5s linear infinite;
+  z-index: 5;
+}
+@keyframes shimmer { to { transform: translateX(100%); } }
+
+/* Featured card — bigger typography + répartition régulière (évite les gros blancs) */
+.live-card.size-featured { padding: 30px 32px; justify-content: space-evenly; }
+.live-card.size-featured .live-team-logo { width: 56px; height: 56px; }
+.live-card.size-featured .live-team-name  { font-size: 1.7em; }
+.live-card.size-featured .live-team-score { font-size: 3.9em; min-width: 62px; }
+.live-card.size-featured .live-status-pill { font-size: 0.9em; padding: 7px 16px; }
+.live-card.size-featured .live-card-clock  { font-size: 1.5em; }
+.live-card.size-featured .live-team-row { padding: 10px 0; }
+.live-card.size-featured .live-card-eyebrow { display: block; }
+.live-card-eyebrow { display: none; font-size: 0.7em; font-weight: 800; letter-spacing: 0.18em; color: var(--gold); text-transform: uppercase; margin-bottom: 4px; }
+
+/* Small cards — denser typography */
+.live-card.size-small .live-team-logo  { width: 26px; height: 26px; }
+.live-card.size-small .live-team-name  { font-size: 0.9em; }
+.live-card.size-small .live-team-score { font-size: 1.5em; min-width: 28px; }
+.live-card.size-small { padding: 16px 18px; gap: 10px; }
+.live-card.size-small .live-card-footer { font-size: 0.65em; }
+
+.live-card-status { display: flex; align-items: center; justify-content: space-between; font-size: 0.7em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+.live-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 0.95em; }
+.live-status-pill.state-in { background: rgba(255,71,87,0.15); color: var(--red); border: 1px solid rgba(255,71,87,0.4); }
+.live-status-pill.state-pre { background: rgba(251,197,49,0.12); color: var(--gold); border: 1px solid rgba(251,197,49,0.3); }
+.live-status-pill.state-post { background: rgba(46,213,115,0.12); color: var(--green, #2ed573); border: 1px solid rgba(46,213,115,0.3); }
+.live-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.live-card.state-in .live-dot { animation: pulse 1.2s infinite; }
+.live-card-clock { font-family: var(--font-d); font-size: 1em; color: var(--white); letter-spacing: 0.05em; }
+.live-card.state-in .live-card-clock { color: var(--red); }
+.live-card.state-pre .live-card-clock { color: var(--gold); }
+.live-countdown { font-family: var(--font-d); font-variant-numeric: tabular-nums; letter-spacing: 0.04em; font-size: 2.2em; line-height: 1; text-shadow: 0 0 14px rgba(251,197,49,0.3); }
+.live-card.size-wide .live-countdown { font-size: 2.6em; }
+.live-card.size-featured .live-countdown { font-size: 3em; text-shadow: 0 0 26px rgba(251,197,49,0.45); }
+.live-card.size-featured .live-card-status { align-items: flex-end; }
+.live-countdown.kickoff-now { color: var(--green-b, #2ed573) !important; animation: pulse 1.2s infinite; }
+
+.live-card-teams { display: flex; flex-direction: column; gap: 8px; }
+.live-team-row { display: flex; align-items: center; gap: 12px; padding: 6px 0; }
+.live-team-row.winner .live-team-name { color: var(--gold); font-weight: 800; }
+.live-team-logo { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
+.live-team-name { flex: 1; font-size: 1em; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.live-team-score { font-family: var(--font-d); font-size: 2em; line-height: 1; color: #fff; min-width: 36px; text-align: right; transition: color 0.3s, transform 0.3s; }
+.live-card.state-in .live-team-score { color: var(--red); }
+.live-card.state-post .live-team-score { color: var(--green-b, #2ed573); }
+.live-team-score.bumped { animation: scoreBump 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+@keyframes scoreBump { 0% { transform: scale(1); } 40% { transform: scale(1.45); } 100% { transform: scale(1); } }
+
+.live-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 0.7em; color: var(--muted); padding-top: 8px; border-top: 1px solid var(--border); }
+.live-venue { display: flex; align-items: center; gap: 4px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.live-kickoff { font-weight: 700; color: var(--white); }
+
+.live-empty, .live-error { text-align: center; padding: 30px 20px; color: var(--muted); font-size: 0.85em; border: 1px dashed var(--border); border-radius: 16px; background: rgba(0,0,0,0.2); }
+.live-error { color: rgba(255,71,87,0.8); border-color: rgba(255,71,87,0.3); }
+
+@media (max-width: 900px) {
+  .live-cards-grid { grid-template-columns: repeat(2, 1fr); }
+  .live-card.size-featured { grid-column: span 2; grid-row: span 1; }
+  .live-card.size-wide     { grid-column: span 2; }
+  .live-card.size-small    { grid-column: span 1; }
+  .live-card.size-featured .live-team-score { font-size: 2.6em; }
+  .live-card.size-featured .live-team-name  { font-size: 1.15em; }
+  .live-card.size-featured .live-team-logo  { width: 36px; height: 36px; }
+}
+@media (max-width: 600px) {
+  .live-cards-grid { grid-template-columns: 1fr; }
+  .live-card.size-featured, .live-card.size-wide, .live-card.size-small { grid-column: span 1; grid-row: span 1; }
+  .live-section-title { font-size: 1.5em; }
+  .live-team-score { font-size: 1.6em; }
+  .live-team-logo { width: 28px; height: 28px; }
+  .live-card { padding: 16px 18px; }
+  .live-card.size-featured { padding: 20px 22px; }
+  .live-card.size-featured .live-team-score { font-size: 2.2em; }
+}
+
+/* ClickSpark effect */
+.spark { position: fixed; pointer-events: none; width: 4px; height: 4px; border-radius: 50%; background: var(--gold); z-index: 9999; }
+
+/* Confetti canvas (goal + champion celebrations) */
+#confetti-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; pointer-events: none; z-index: 999; }
+
+/* Footer légal */
+.site-footer { max-width: 900px; margin: 60px auto 10px; padding: 24px 20px; text-align: center; border-top: 1px solid var(--border); position: relative; z-index: 2; }
+.footer-disclaimer { font-size: 0.72em; color: var(--muted); line-height: 1.6; margin-bottom: 12px; }
+.footer-disclaimer strong { color: var(--white); }
+.footer-links { font-size: 0.72em; font-weight: 600; }
+.footer-links a { color: var(--gold); text-decoration: none; transition: opacity 0.2s; }
+.footer-links a:hover { opacity: 0.7; text-decoration: underline; }
+
+/* =========================================================
+   GLITCH TEXT — « EN DIRECT » signal TV (ReactBits GlitchText)
+   ========================================================= */
+.glitch-live {
+  position: relative;
+  font-family: var(--font-d);
+  font-size: 1em;
+  letter-spacing: 0.08em;
+  color: #fff;
+  display: inline-block;
+  line-height: 1;
+  text-shadow: 0 0 6px rgba(255,71,87,0.4);
+}
+.glitch-live::before,
+.glitch-live::after {
+  content: attr(data-text);
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  background: transparent;
+  overflow: hidden;
+  clip-path: inset(0 0 0 0);
+}
+.glitch-live::before {
+  color: #00fff9;
+  z-index: -1;
+  animation: glitchTop 2.5s infinite linear alternate-reverse;
+}
+.glitch-live::after {
+  color: var(--red);
+  z-index: -2;
+  animation: glitchBottom 2s infinite linear alternate-reverse;
+}
+@keyframes glitchTop {
+  0%   { transform: translate(0); clip-path: inset(0 0 70% 0); }
+  10%  { transform: translate(-2px, -1px); clip-path: inset(10% 0 55% 0); }
+  20%  { transform: translate(2px, 1px);  clip-path: inset(40% 0 30% 0); }
+  30%  { transform: translate(-1px, 1px); clip-path: inset(20% 0 60% 0); }
+  40%  { transform: translate(2px, -1px); clip-path: inset(0 0 80% 0); }
+  50%  { transform: translate(-2px, 0);   clip-path: inset(60% 0 10% 0); }
+  60%, 100% { transform: translate(0); clip-path: inset(0 0 70% 0); }
+}
+@keyframes glitchBottom {
+  0%   { transform: translate(0); clip-path: inset(70% 0 0 0); }
+  10%  { transform: translate(2px, 1px);  clip-path: inset(55% 0 10% 0); }
+  20%  { transform: translate(-2px, -1px);clip-path: inset(30% 0 40% 0); }
+  30%  { transform: translate(1px, -1px); clip-path: inset(60% 0 20% 0); }
+  40%  { transform: translate(-2px, 1px); clip-path: inset(80% 0 0 0); }
+  50%  { transform: translate(2px, 0);    clip-path: inset(10% 0 60% 0); }
+  60%, 100% { transform: translate(0); clip-path: inset(70% 0 0 0); }
+}
+/* Scanline flicker overlay — reinforces the TV-signal feel */
+.glitch-live-badge {
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 12px; border-radius: 8px;
+  background: rgba(255,71,87,0.1);
+  border: 1px solid rgba(255,71,87,0.35);
+  position: relative; overflow: hidden;
+  animation: liveFlicker 4s infinite steps(1);
+}
+.glitch-live-badge::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(0,0,0,0.12) 0 1px, transparent 1px 3px);
+  mix-blend-mode: overlay;
+}
+@keyframes liveFlicker {
+  0%, 92%, 100% { opacity: 1; }
+  93% { opacity: 0.6; }
+  94% { opacity: 1; }
+  96% { opacity: 0.75; }
+  97% { opacity: 1; }
+}
+.live-rec-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--red); box-shadow: 0 0 10px var(--red); animation: pulse 1.2s infinite; flex-shrink: 0; }
+
+/* =========================================================
+   GLASS SURFACE / GLASS ICONS (ReactBits) — vrai verre dépoli
+   ========================================================= */
+.glass-surface {
+  position: relative;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 18px;
+  box-shadow:
+    0 6px 24px rgba(0,0,0,0.35),
+    inset 0 1px 0 rgba(255,255,255,0.25),
+    inset 0 -1px 0 rgba(0,0,0,0.2);
+  /* SVG refraction — Chromium ; dégrade en simple blur ailleurs */
+  -webkit-backdrop-filter: blur(8px) saturate(1.4);
+  backdrop-filter: blur(8px) url(#glass-distortion) saturate(1.4);
+  overflow: hidden;
+}
+.glass-surface::before {
+  content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+  background: linear-gradient(135deg, rgba(255,255,255,0.18) 0%, transparent 40%, transparent 60%, rgba(255,255,255,0.06) 100%);
+}
+
+.live-section-header.glass-surface { padding: 12px 18px; margin-bottom: 18px; }
+
+/* GlassIcons — boutons icône en verre teinté */
+.glass-icon-btn {
+  position: relative;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 8px 14px; border-radius: 12px;
+  font-size: 0.72em; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase;
+  color: #fff; cursor: pointer;
+  background: linear-gradient(135deg, rgba(251,197,49,0.22), rgba(251,197,49,0.06));
+  border: 1px solid rgba(251,197,49,0.35);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 4px 14px rgba(0,0,0,0.3);
+  transition: transform 0.18s, box-shadow 0.18s, background 0.2s;
+  overflow: hidden;
+}
+.glass-icon-btn::after {
+  content: ''; position: absolute; top: 0; left: -120%; width: 60%; height: 100%;
+  background: linear-gradient(110deg, transparent, rgba(255,255,255,0.35), transparent);
+  transform: skewX(-18deg); transition: left 0.5s;
+}
+.glass-icon-btn:hover { transform: translateY(-2px); box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 8px 22px rgba(251,197,49,0.25); }
+.glass-icon-btn:hover::after { left: 140%; }
+.glass-icon-btn:active { transform: translateY(0) scale(0.97); }
+.glass-icon-btn .gi-emoji { font-size: 1.15em; }
+.glass-icon-btn.spinning .gi-emoji { animation: spin 0.8s linear infinite; display: inline-block; }
+
+/* =========================================================
+   GROUPS OVERVIEW — aperçu des 12 groupes (remplit le dashboard)
+   ========================================================= */
+.groups-overview { max-width: 1200px; margin: 40px auto 10px; }
+.go-section-title { font-family: var(--font-d); font-size: 1.8em; letter-spacing: 0.05em; color: #fff; margin-bottom: 16px; }
+.groups-overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
+.go-card { background: rgba(15,25,35,0.7); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; backdrop-filter: blur(8px); transition: border-color 0.2s, transform 0.2s; }
+.go-card:hover { border-color: rgba(251,197,49,0.35); transform: translateY(-2px); }
+.go-head { font-family: var(--font-d); font-size: 1.2em; letter-spacing: 0.06em; color: var(--gold); padding: 10px 14px; border-bottom: 1px solid var(--border); background: rgba(251,197,49,0.06); }
+.go-team { display: flex; align-items: center; gap: 9px; padding: 8px 14px; cursor: pointer; transition: background 0.15s; }
+.go-team + .go-team { border-top: 1px solid rgba(255,255,255,0.05); }
+.go-team:hover { background: rgba(251,197,49,0.08); }
+.go-team img { width: 24px; height: 16px; object-fit: cover; border-radius: 3px; box-shadow: 0 1px 3px rgba(0,0,0,0.4); flex-shrink: 0; }
+.go-team span { font-size: 0.84em; font-weight: 600; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 900px) { .groups-overview-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 480px) { .groups-overview-grid { grid-template-columns: 1fr; } .go-section-title { font-size: 1.5em; } }
+
+/* =========================================================
+   LOGO LOOP — marquee infini des 48 drapeaux (ReactBits LogoLoop)
+   ========================================================= */
+.flag-loop-section { max-width: 1400px; margin: 50px auto 10px; }
+.flag-loop-label { text-align: center; font-size: 0.7em; font-weight: 800; letter-spacing: 0.25em; color: var(--muted); text-transform: uppercase; margin-bottom: 16px; }
+.flag-loop {
+  position: relative; overflow: hidden; width: 100%;
+  -webkit-mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+}
+.flag-loop-track { display: flex; width: max-content; gap: 14px; animation: flagScroll 60s linear infinite; }
+.flag-loop:hover .flag-loop-track { animation-play-state: paused; }
+@keyframes flagScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+.flag-chip {
+  display: flex; align-items: center; gap: 8px; flex-shrink: 0;
+  padding: 8px 14px; border-radius: 12px;
+  background: rgba(15,25,35,0.6); border: 1px solid var(--border);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.flag-chip { cursor: pointer; }
+.flag-chip:hover { transform: translateY(-4px) scale(1.06); border-color: rgba(251,197,49,0.5); box-shadow: 0 10px 26px rgba(0,0,0,0.5); }
+.flag-chip:active { transform: translateY(-1px) scale(1.02); }
+.flag-chip img { width: 28px; height: 20px; object-fit: cover; border-radius: 3px; box-shadow: 0 1px 4px rgba(0,0,0,0.4); flex-shrink: 0; pointer-events: none; }
+.flag-chip span { font-size: 0.78em; font-weight: 700; color: var(--white); white-space: nowrap; pointer-events: none; }
+
+/* =========================================================
+   PIXEL CARD — carte pays "collectible" (ReactBits PixelCard)
+   ========================================================= */
+.country-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.78); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); z-index: 1100; align-items: center; justify-content: center; padding: 20px; }
+.country-modal-backdrop.open { display: flex; animation: fadeIn 0.25s ease; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+.pixel-card {
+  position: relative; width: 340px; max-width: calc(100vw - 40px); min-height: 453px;
+  border-radius: 24px; overflow: hidden; isolation: isolate;
+  border: 1px solid rgba(251,197,49,0.35);
+  background: radial-gradient(circle at 50% 0%, #16212e, #070d12 75%);
+  box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 50px rgba(251,197,49,0.12), inset 0 1px 0 rgba(255,255,255,0.08);
+  animation: cardPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+@keyframes cardPop { from { opacity: 0; transform: translateY(24px) scale(0.92); } to { opacity: 1; transform: none; } }
+.pixel-card > canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+
+.pixel-card-inner { position: relative; z-index: 1; min-height: 453px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 14px; padding: 28px 22px 22px; text-align: center; pointer-events: none; }
+
+.pc-group { font-size: 0.7em; font-weight: 800; letter-spacing: 0.2em; text-transform: uppercase; color: #000; background: var(--gold); padding: 5px 14px; border-radius: 20px; box-shadow: 0 0 20px rgba(251,197,49,0.4); }
+.pc-flag { width: 120px; height: 80px; object-fit: cover; border-radius: 8px; margin-top: 14px; box-shadow: 0 8px 30px rgba(0,0,0,0.6), 0 0 0 1px rgba(255,255,255,0.12); }
+.pc-name { font-family: var(--font-d); font-size: 2.6em; line-height: 1; color: #fff; margin-top: 14px; letter-spacing: 0.03em; text-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+.pc-sub { font-size: 0.7em; color: var(--muted); letter-spacing: 0.15em; text-transform: uppercase; margin-top: 6px; }
+
+.pc-opponents { width: 100%; }
+.pc-opp-label { font-size: 0.62em; font-weight: 700; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); margin-bottom: 10px; }
+.pc-opp-row { display: flex; justify-content: center; gap: 8px; }
+.pc-opp { display: flex; flex-direction: column; align-items: center; gap: 4px; width: 56px; }
+.pc-opp img { width: 34px; height: 23px; object-fit: cover; border-radius: 3px; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+.pc-opp span { font-size: 0.52em; color: var(--white); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 56px; }
+
+/* Parcours / résultats de l'équipe sur la carte */
+.pc-results { width: 100%; }
+.pc-results .pc-opp-label { font-size: 0.72em; margin-bottom: 10px; }
+.pc-res-summary { font-size: 1em; font-weight: 800; letter-spacing: 0.05em; color: var(--white); margin-bottom: 12px; }
+.pc-res-summary b { color: var(--gold); font-size: 1.15em; }
+.pc-res-row { display: flex; justify-content: center; flex-wrap: wrap; gap: 8px; }
+.pc-res-chip { display: inline-flex; align-items: center; gap: 7px; padding: 8px 13px; border-radius: 10px; font-size: 1em; font-weight: 800; border: 1.5px solid; font-variant-numeric: tabular-nums; }
+.pc-res-chip img { width: 26px; height: 18px; object-fit: cover; border-radius: 3px; }
+.pc-res-chip.res-w { color: #2ed573; border-color: rgba(46,213,115,0.45); background: rgba(46,213,115,0.12); }
+.pc-res-chip.res-d { color: var(--muted); border-color: rgba(255,255,255,0.22); background: rgba(255,255,255,0.06); }
+.pc-res-chip.res-l { color: var(--red); border-color: rgba(255,71,87,0.45); background: rgba(255,71,87,0.12); }
+.pc-res-chip.is-live { animation: pulse 1.4s infinite; }
+
+.pc-cta { pointer-events: auto; margin-top: 16px; display: inline-block; text-decoration: none; font-size: 0.7em; font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: #000; background: var(--gold); padding: 10px 18px; border-radius: 10px; transition: transform 0.18s, box-shadow 0.18s; }
+.pc-cta:hover { transform: translateY(-2px); box-shadow: 0 8px 22px rgba(251,197,49,0.35); }
+
+.pc-close { pointer-events: auto; position: absolute; top: 12px; right: 12px; z-index: 2; width: 30px; height: 30px; border: none; border-radius: 50%; background: rgba(0,0,0,0.45); color: #fff; font-size: 1em; line-height: 30px; text-align: center; cursor: pointer; transition: background 0.15s; }
+.pc-close:hover { background: rgba(255,71,87,0.8); }
+
+@media (max-width: 600px) {
+  .nav-forward { position: relative; display: block; width: max-content; margin: 0 auto 30px; right: 0; }
+  .flag-chip span { display: none; }
+  .flag-chip { padding: 8px 10px; }
+}
+</style>
+</head>
+<body>
+
+<canvas id="confetti-canvas"></canvas>
+
+<!-- SVG refraction filter for .glass-surface (ReactBits GlassSurface) -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%">
+    <feTurbulence type="fractalNoise" baseFrequency="0.008 0.012" numOctaves="2" seed="92" result="noise"/>
+    <feGaussianBlur in="noise" stdDeviation="2" result="blurred"/>
+    <feDisplacementMap in="SourceGraphic" in2="blurred" scale="42" xChannelSelector="R" yChannelSelector="G"/>
+  </filter>
+</svg>
+
+<div id="lang-toggle" style="top:18px; left:20px;"></div>
+
+<a href="CDM.html" class="nav-forward" data-i18n="nav_simulator">Tracker →</a>
+
+<div class="header">
+  <h1 id="hero-title"></h1>
+  <p data-i18n="subtitle_dash">Statistiques & Calendrier en temps réel</p>
+</div>
+
+<section class="live-section" id="live-section" style="display:none;">
+  <div class="live-section-header glass-surface">
+    <div class="live-section-title">
+      <span class="glitch-live-badge">
+        <span class="live-rec-dot"></span>
+        <span class="glitch-live" id="glitch-live" data-text="EN DIRECT">EN DIRECT</span>
+      </span>
+      <span id="live-section-title-text" style="font-family:var(--font-d); letter-spacing:0.05em;">AUJOURD'HUI</span>
+    </div>
+    <div class="live-section-meta">
+      <span id="live-last-update">—</span>
+      <button class="glass-icon-btn" id="live-refresh-btn" onclick="fetchLiveScores(true)">
+        <span class="gi-emoji">↻</span> <span data-i18n="live_refresh">Rafraîchir</span>
+      </button>
+    </div>
+  </div>
+  <div class="live-cards-grid" id="live-cards-grid"></div>
+</section>
+
+<section class="groups-overview">
+  <div class="go-section-title" data-i18n="groups_overview_title">🏆 Les 12 groupes</div>
+  <div class="groups-overview-grid" id="groups-overview-grid"></div>
+</section>
+
+<section class="flag-loop-section">
+  <div class="flag-loop-label" data-i18n="flag_loop_label">⚽ Les 48 nations · clique sur un drapeau</div>
+  <div class="flag-loop">
+    <div class="flag-loop-track" id="flag-loop-track"></div>
+  </div>
+</section>
+
+<div class="country-modal-backdrop" id="country-modal-backdrop"></div>
+
+<footer class="site-footer">
+  <p class="footer-disclaimer" data-i18n-html="footer_disclaimer">Projet indépendant réalisé par un fan — <strong>non affilié à la FIFA</strong> ni à aucun organisme officiel. « World Cup 2026 » et les marques associées appartiennent à leurs propriétaires. Scores fournis par ESPN (source non officielle), à titre indicatif.</p>
+  <p class="footer-links">
+    <a href="legal.html" data-i18n="footer_legal">Mentions légales</a> ·
+    <a href="legal.html#confidentialite" data-i18n="footer_privacy">Confidentialité</a> ·
+    <a href="legal.html#cgu" data-i18n="footer_terms">CGU</a> ·
+    <a href="legal.html#credits" data-i18n="footer_credits">Crédits</a>
+  </p>
+</footer>
+
+
+<script>
+// DAY.JS — init plugins + locale FR (fallback natif si le CDN échoue)
+const HAS_DAYJS = typeof dayjs !== 'undefined';
+if (HAS_DAYJS) {
+  try {
+    dayjs.extend(dayjs_plugin_utc);
+    dayjs.extend(dayjs_plugin_timezone);
+    dayjs.extend(dayjs_plugin_duration);
+    dayjs.extend(dayjs_plugin_relativeTime);
+    dayjs.locale('fr');
+  } catch (e) { console.warn('Day.js init failed:', e); }
+}
+const PARIS_TZ = 'Europe/Paris';
+
+// SPLIT TEXT — Hero title letter-by-letter reveal
+(function splitTextHero() {
+  const target = document.getElementById('hero-title');
+  if (!target) return;
+  const parts = [
+    { text: 'GLOBAL', cls: '' },
+    { text: 'DASHBOARD', cls: 'gold', leadingGap: true }
+  ];
+  let i = 0;
+  parts.forEach(p => {
+    p.text.split('').forEach((ch, idx) => {
+      const l = document.createElement('span');
+      l.className = 'hero-letter' + (p.cls ? ' ' + p.cls : '');
+      if (idx === 0 && p.leadingGap) l.style.marginLeft = '0.35em';
+      l.textContent = ch === ' ' ? ' ' : ch;
+      l.style.animationDelay = (i * 0.04) + 's';
+      target.appendChild(l);
+      i++;
+    });
+  });
+})();
+
+// CLICK SPARK — sparks on click
+window.addEventListener('click', (e) => {
+  if (e.target.closest('a, button, input')) return;
+  const count = 10;
+  for (let i = 0; i < count; i++) {
+    const spark = document.createElement('div');
+    spark.className = 'spark';
+    spark.style.left = e.clientX + 'px';
+    spark.style.top = e.clientY + 'px';
+    document.body.appendChild(spark);
+    const angle = (Math.PI * 2 * i) / count;
+    const dist = 40 + Math.random() * 30;
+    spark.animate([
+      { transform: 'translate(0,0) scale(1)', opacity: 1 },
+      { transform: `translate(${Math.cos(angle) * dist}px, ${Math.sin(angle) * dist}px) scale(0)`, opacity: 0 }
+    ], { duration: 600, easing: 'cubic-bezier(0.2, 0.6, 0.3, 1)' }).onfinish = () => spark.remove();
+  }
+});
+
+/* ===========================================================
+   CONFETTI ENGINE — bursts par côté (couleurs équipe) + champion.
+   Un seul canvas / une seule boucle ; les bursts s'additionnent.
+   =========================================================== */
+const Confetti = (() => {
+  const canvas = document.getElementById('confetti-canvas');
+  if (!canvas) return { goal() {}, champion() {} };
+  const ctx = canvas.getContext('2d');
+  let parts = [], running = false, W = 0, H = 0;
+  function resize() {
+    const dpr = window.devicePixelRatio || 1;
+    W = window.innerWidth; H = window.innerHeight;
+    canvas.width = W * dpr; canvas.height = H * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+  function loop() {
+    ctx.clearRect(0, 0, W, H);
+    for (const p of parts) {
+      p.vy += 0.16; p.vx *= 0.995; p.x += p.vx; p.y += p.vy; p.rot += p.vr; p.life--;
+      ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.globalAlpha = p.life < 40 ? Math.max(0, p.life / 40) : 1;
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    }
+    parts = parts.filter(p => p.life > 0 && p.y < H + 80);
+    if (parts.length) requestAnimationFrame(loop);
+    else { running = false; ctx.clearRect(0, 0, W, H); }
+  }
+  function run() { if (!running) { running = true; requestAnimationFrame(loop); } }
+  function emit(x, y, n, colors, { angle = -Math.PI / 2, spread = Math.PI / 2, power = 14, life = 130 } = {}) {
+    if (!W) resize();
+    for (let i = 0; i < n; i++) {
+      const a = angle + (Math.random() - 0.5) * spread;
+      const sp = power * (0.5 + Math.random());
+      parts.push({
+        x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp,
+        w: 6 + Math.random() * 7, h: 9 + Math.random() * 9,
+        rot: Math.random() * Math.PI, vr: (Math.random() - 0.5) * 0.35,
+        color: colors[(Math.random() * colors.length) | 0],
+        life: life + Math.random() * 50
+      });
+    }
+    run();
+  }
+  const teamColors = (hex) => {
+    const c = hex ? (hex[0] === '#' ? hex : '#' + hex) : '#fbc531';
+    return [c, c, '#fbc531', '#ffffff', '#ffd966'];
+  };
+  return {
+    goal(side, hex) {
+      resize();
+      const colors = teamColors(hex);
+      if (side === 'home')      emit(W * 0.10, H * 0.62, 70, colors, { angle: -Math.PI / 3,     spread: Math.PI / 2.4, power: 17 });
+      else if (side === 'away') emit(W * 0.90, H * 0.62, 70, colors, { angle: -Math.PI * 2 / 3, spread: Math.PI / 2.4, power: 17 });
+      else                      emit(W / 2,    H * 0.50, 80, colors, { angle: -Math.PI / 2,     spread: Math.PI,       power: 14 });
+    },
+    champion() {
+      resize();
+      const colors = ['#fbc531', '#ff4757', '#2ed573', '#54a0ff', '#fff', '#a55eea', '#ff7f50'];
+      emit(W * 0.5, -20, 200, colors, { angle: Math.PI / 2, spread: Math.PI / 2.5, power: 6, life: 200 });
+      emit(W * 0.14, H * 0.6, 60, colors, { angle: -Math.PI / 3,     spread: Math.PI / 3, power: 18 });
+      emit(W * 0.86, H * 0.6, 60, colors, { angle: -Math.PI * 2 / 3, spread: Math.PI / 3, power: 18 });
+    }
+  };
+})();
+
+// Which side(s) just scored? (numeric increase only → no false positive at kickoff)
+function scoringSides(prevKey, curHome, curAway) {
+  const p = (prevKey || '').split('-');
+  const ph = parseInt(p[0]), pa = parseInt(p[1]);
+  const ch = parseInt(curHome), ca = parseInt(curAway);
+  const sides = [];
+  if (!isNaN(ph) && !isNaN(ch) && ch > ph) sides.push('home');
+  if (!isNaN(pa) && !isNaN(ca) && ca > pa) sides.push('away');
+  return sides;
+}
+
+/* ===========================================================
+   LIVE SCORES — ESPN public API (no auth required)
+   Endpoint returns scoreboard for FIFA World Cup, today by default.
+   Doc: https://gist.github.com/akeaswaran/b48b02f1c94f873c6655e7129910fc3b
+   =========================================================== */
+const ESPN_ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+
+/* ---------- Résultats du tournoi (toute la période) → parcours des équipes ---------- */
+let _allEvents = null;
+async function loadAllResults() {
+  try {
+    const res = await fetch(`${ESPN_ENDPOINT}?dates=20260611-20260720&limit=500`, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    _allEvents = (data.events || []).filter(e => e.competitions && e.competitions[0]);
+    // si une carte pays est ouverte, on rafraîchit son parcours (+ on re-dimensionne le canvas pixel)
+    const open = document.querySelector('.pixel-card[data-country]');
+    if (open) {
+      renderCountryResults(open.dataset.country);
+      if (_pixelCtl) { _pixelCtl.build(); _pixelCtl.appear(); }
+    }
+  } catch (err) { console.warn('loadAllResults failed:', err); }
+}
+// Parcours d'une équipe (matchs joués/en cours), du plus ancien au plus récent
+function getTeamResults(frTeam) {
+  if (!_allEvents) return null;
+  const out = [];
+  for (const ev of _allEvents) {
+    const comp = ev.competitions[0];
+    const state = comp.status.type.state;
+    if (state !== 'post' && state !== 'in') continue;
+    const cs = comp.competitors || [];
+    const me = cs.find(c => c.team && frName(c.team.displayName) === frTeam);
+    if (!me) continue;
+    const opp = cs.find(c => c !== me);
+    if (!opp || !opp.team) continue;
+    const gf = parseInt(me.score), ga = parseInt(opp.score);
+    if (isNaN(gf) || isNaN(ga)) continue;
+    out.push({ opp: frName(opp.team.displayName), gf, ga, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', live: state === 'in', date: ev.date });
+  }
+  out.sort((a, b) => new Date(a.date) - new Date(b.date));
+  return out;
+}
+
+// EN → FR translation for common World Cup team names so the live block
+// matches the rest of the dashboard. Falls back to the English name if missing.
+const teamNameEnFr = {
+  'Mexico': 'Mexique', 'South Africa': 'Afrique du Sud', 'South Korea': 'Corée du Sud', 'Korea Republic': 'Corée du Sud', 'Czech Republic': 'Tchéquie', 'Czechia': 'Tchéquie',
+  'Canada': 'Canada', 'Bosnia and Herzegovina': 'Bosnie-Herzégovine', 'Bosnia & Herzegovina': 'Bosnie-Herzégovine', 'Qatar': 'Qatar', 'Switzerland': 'Suisse',
+  'Brazil': 'Brésil', 'Morocco': 'Maroc', 'Haiti': 'Haïti', 'Scotland': 'Écosse',
+  'United States': 'États-Unis', 'USA': 'États-Unis', 'Paraguay': 'Paraguay', 'Australia': 'Australie', 'Turkey': 'Turquie', 'Türkiye': 'Turquie',
+  'Germany': 'Allemagne', 'Curacao': 'Curaçao', 'Curaçao': 'Curaçao', 'Ivory Coast': "Côte d'Ivoire", 'Côte d’Ivoire': "Côte d'Ivoire", 'Ecuador': 'Équateur',
+  'Netherlands': 'Pays-Bas', 'Japan': 'Japon', 'Sweden': 'Suède', 'Tunisia': 'Tunisie',
+  'Belgium': 'Belgique', 'Egypt': 'Égypte', 'Iran': 'Iran', 'New Zealand': 'Nouvelle-Zélande',
+  'Spain': 'Espagne', 'Cape Verde': 'Cap-Vert', 'Saudi Arabia': 'Arabie Saoudite', 'Uruguay': 'Uruguay',
+  'France': 'France', 'Senegal': 'Sénégal', 'Iraq': 'Irak', 'Norway': 'Norvège',
+  'Argentina': 'Argentine', 'Algeria': 'Algérie', 'Austria': 'Autriche', 'Jordan': 'Jordanie',
+  'Portugal': 'Portugal', 'DR Congo': 'RD Congo', 'Congo DR': 'RD Congo', 'Uzbekistan': 'Ouzbékistan', 'Colombia': 'Colombie',
+  'England': 'Angleterre', 'Croatia': 'Croatie', 'Ghana': 'Ghana', 'Panama': 'Panama'
+};
+const frName = (en) => teamNameEnFr[en] || en;
+
+// Status helpers
+function statusKey(stateRaw) {
+  if (stateRaw === 'in') return 'in';
+  if (stateRaw === 'post') return 'post';
+  return 'pre';
+}
+function statusLabel(ev) {
+  const state = ev.competitions[0].status.type.state;
+  if (state === 'in') return window.t('status_in');
+  if (state === 'post') return window.t('status_post');
+  return window.t('status_pre');
+}
+/* ---------- Time helpers (Day.js with native fallback) ---------- */
+function parisTime(iso) {
+  if (HAS_DAYJS) return dayjs(iso).tz(PARIS_TZ).format('HH:mm');
+  try { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: PARIS_TZ }); }
+  catch { return ''; }
+}
+function clockLabel(ev) {
+  const c = ev.competitions[0].status;
+  const t = c.type;
+  if (t.state === 'in') return c.displayClock || t.shortDetail || '';
+  if (t.state === 'post') return t.shortDetail || 'FT';
+  return parisTime(ev.date); // pre — kickoff in Paris time
+}
+
+/* ---------- Countdown to kickoff (live ticking) ---------- */
+function formatCountdown(ms) {
+  if (ms <= 0) return null;
+  if (HAS_DAYJS) {
+    const d = dayjs.duration(ms);
+    const days = Math.floor(d.asDays());
+    if (days > 0) return `${days}j ${d.hours()}h`;
+    if (d.hours() > 0) return `${d.hours()}h ${String(d.minutes()).padStart(2, '0')}min`;
+    return `${String(d.minutes()).padStart(2, '0')}:${String(d.seconds()).padStart(2, '0')}`;
+  }
+  const s = Math.floor(ms / 1000);
+  const days = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  if (days > 0) return `${days}j ${h}h`;
+  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}min`;
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
+}
+// Friendly relative label ("dans environ 2 heures") for the title attribute
+function relativeKickoff(iso) {
+  if (HAS_DAYJS) { try { return dayjs(iso).fromNow(); } catch { return ''; } }
+  return '';
+}
+function countdownText(iso) {
+  const f = formatCountdown(new Date(iso).getTime() - Date.now());
+  return f === null ? window.t('countdown_kickoff') : '⏳ ' + f;
+}
+function tickCountdowns() {
+  document.querySelectorAll('.live-countdown[data-kickoff]').forEach(el => {
+    const f = formatCountdown(new Date(el.dataset.kickoff).getTime() - Date.now());
+    if (f === null) { el.textContent = window.t('countdown_kickoff'); el.classList.add('kickoff-now'); }
+    else { el.textContent = '⏳ ' + f; el.classList.remove('kickoff-now'); }
+  });
+}
+setInterval(tickCountdowns, 1000);
+
+const lastScores = {}; // event.id -> "s1-s2" to detect bumps
+
+async function fetchLiveScores(manual = false) {
+  const btn = document.getElementById('live-refresh-btn');
+  if (btn) btn.classList.add('spinning');
+  try {
+    const res = await fetch(ESPN_ENDPOINT, { cache: 'no-store' });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const data = await res.json();
+    _lastLiveData = data;
+    renderLiveScores(data, manual);
+  } catch (err) {
+    console.warn('ESPN fetch failed:', err);
+    renderLiveError();
+  } finally {
+    if (btn) setTimeout(() => btn.classList.remove('spinning'), 400);
+  }
+}
+
+function renderLiveError() {
+  const section = document.getElementById('live-section');
+  const grid = document.getElementById('live-cards-grid');
+  const hasContent = grid.querySelector('.live-card');
+  if (hasContent) return; // keep last good render
+  section.style.display = '';
+  grid.innerHTML = `<div class="live-error">${window.t('net_error')}</div>`;
+  document.getElementById('live-last-update').textContent = window.t('net_error');
+}
+
+function renderLiveScores(data, manual) {
+  const section = document.getElementById('live-section');
+  const grid = document.getElementById('live-cards-grid');
+  const titleText = document.getElementById('live-section-title-text');
+  const events = (data.events || []).slice();
+
+  if (events.length === 0) {
+    section.style.display = '';
+    grid.innerHTML = `<div class="live-empty">${window.t('empty_today')}</div>`;
+    setLiveBadge(0);
+    titleText.textContent = window.t('live_no_match');
+    stampUpdate();
+    return;
+  }
+
+  // Sort: live first, then upcoming by kickoff, then finished by latest
+  const order = { in: 0, pre: 1, post: 2 };
+  events.sort((a, b) => {
+    const sa = order[statusKey(a.competitions[0].status.type.state)];
+    const sb = order[statusKey(b.competitions[0].status.type.state)];
+    if (sa !== sb) return sa - sb;
+    return new Date(a.date) - new Date(b.date);
+  });
+
+  const liveCount = events.filter(e => e.competitions[0].status.type.state === 'in').length;
+  setLiveBadge(liveCount);
+  if (liveCount > 1) titleText.textContent = `· ${liveCount} ${window.t('live_matches_word')}`;
+  else if (liveCount === 1) titleText.textContent = window.t('live_now');
+  else titleText.textContent = window.t('live_today_matches');
+
+  section.style.display = '';
+  grid.innerHTML = '';
+  events.forEach((ev, idx) => {
+    const size = sizeForIndex(idx, events.length);
+    grid.appendChild(buildLiveCard(ev, idx, size));
+  });
+  bindLiveGlow();
+  stampUpdate();
+}
+
+/* Bento sizing rule — first card is featured (2x2), next two are wide (2x1),
+   subsequent cards alternate wide/wide to mirror the bento hierarchy. */
+function sizeForIndex(idx, total) {
+  if (total === 1) return 'size-full';                 // 1 match → bandeau pleine largeur
+  if (total === 2) return 'size-wide';                 // 2 → deux demi-largeurs
+  if (idx === 0) return 'size-featured';               // 3+ → 1 vedette 2×2
+  if (idx === 1 || idx === 2) return 'size-wide';      // + 2 demi-largeurs à droite
+  return 'size-small';                                 // le reste en petites cartes 1×1
+}
+
+/* GlitchText badge — only "live" when at least one match is in progress.
+   Otherwise the badge calms down to a neutral grey state (no TV glitch). */
+function setLiveBadge(liveCount) {
+  const badge = document.querySelector('.glitch-live-badge');
+  const glitch = document.getElementById('glitch-live');
+  if (!badge || !glitch) return;
+  if (liveCount > 0) {
+    badge.style.display = '';
+    glitch.dataset.text = window.t('live_badge');
+    glitch.textContent = window.t('live_badge');
+  } else {
+    // No live match → hide the glitchy "EN DIRECT" badge entirely
+    badge.style.display = 'none';
+  }
+}
+
+/* Magic glow follows cursor across every live-card (same as the Bento) */
+let _liveGlowBound = false;
+function bindLiveGlow() {
+  if (_liveGlowBound) return;
+  _liveGlowBound = true;
+  const grid = document.getElementById('live-cards-grid');
+  if (!grid) return;
+  grid.addEventListener('mousemove', (e) => {
+    grid.querySelectorAll('.live-card').forEach(card => {
+      const r = card.getBoundingClientRect();
+      card.style.setProperty('--mouse-x', (e.clientX - r.left) + 'px');
+      card.style.setProperty('--mouse-y', (e.clientY - r.top) + 'px');
+    });
+  });
+}
+
+function buildLiveCard(ev, idx, sizeClass) {
+  const comp = ev.competitions[0];
+  const st = comp.status.type;
+  const state = statusKey(st.state);
+  const competitors = comp.competitors || [];
+  const home = competitors.find(c => c.homeAway === 'home') || competitors[0];
+  const away = competitors.find(c => c.homeAway === 'away') || competitors[1];
+
+  const card = document.createElement('div');
+  card.className = `live-card state-${state} ${sizeClass || 'size-wide'}`;
+  card.style.animationDelay = (0.05 + idx * 0.05) + 's';
+  card.dataset.eventId = ev.id;
+
+  const venue = comp.venue || ev.venue || {};
+  const venueName = venue.fullName || '';
+  const venueCity = (venue.address && venue.address.city) ? venue.address.city.split(',')[0] : '';
+
+  const homeWinner = state === 'post' && home && home.winner;
+  const awayWinner = state === 'post' && away && away.winner;
+
+  const homeScore = home && home.score !== undefined ? home.score : '–';
+  const awayScore = away && away.score !== undefined ? away.score : '–';
+
+  const eyebrowText = state === 'in' ? window.t('eyebrow_featured') : state === 'pre' ? window.t('eyebrow_next') : window.t('eyebrow_done');
+
+  card.innerHTML = `
+    <div class="live-shimmer"></div>
+    <div>
+      <div class="live-card-eyebrow">${eyebrowText}</div>
+      <div class="live-card-status">
+        <span class="live-status-pill state-${state}">
+          <span class="live-dot"></span> ${statusLabel(ev)}
+        </span>
+        ${state === 'pre'
+          ? `<span class="live-card-clock live-countdown" data-kickoff="${ev.date}" title="${window.t('kickoff_word')} ${parisTime(ev.date)} · ${relativeKickoff(ev.date)}">${countdownText(ev.date)}</span>`
+          : `<span class="live-card-clock">${clockLabel(ev)}</span>`}
+      </div>
+    </div>
+    <div class="live-card-teams">
+      <div class="live-team-row ${homeWinner ? 'winner' : ''}">
+        ${teamLogoTag(home)}
+        <span class="live-team-name">${escapeHTML(frName(home ? home.team.displayName : '—'))}</span>
+        <span class="live-team-score" data-side="home">${state === 'pre' ? '–' : homeScore}</span>
+      </div>
+      <div class="live-team-row ${awayWinner ? 'winner' : ''}">
+        ${teamLogoTag(away)}
+        <span class="live-team-name">${escapeHTML(frName(away ? away.team.displayName : '—'))}</span>
+        <span class="live-team-score" data-side="away">${state === 'pre' ? '–' : awayScore}</span>
+      </div>
+    </div>
+    <div class="live-card-footer">
+      <span class="live-venue" title="${escapeHTML(venueName)}">📍 ${escapeHTML(venueCity || venueName || window.t('venue_default'))}</span>
+      <span class="live-kickoff">${kickoffShort(ev.date)}</span>
+    </div>
+  `;
+
+  // Detect score change vs previous render and bump
+  const key = `${homeScore}-${awayScore}`;
+  const prev = lastScores[ev.id];
+  if (prev && prev !== key && state === 'in') {
+    requestAnimationFrame(() => {
+      card.querySelectorAll('.live-team-score').forEach(el => {
+        el.classList.remove('bumped');
+        void el.offsetWidth;
+        el.classList.add('bumped');
+      });
+    });
+    // GOAL! → confetti from the scoring team's side, in its colours
+    scoringSides(prev, homeScore, awayScore).forEach(side => {
+      const scorer = side === 'home' ? home : away;
+      Confetti.goal(side, scorer && scorer.team && scorer.team.color);
+      if (typeof toast !== 'undefined') toast(`⚽ ${window.t('toast_goal')} ${frName(scorer.team.displayName)}`, 'live', '🎉', 4000);
+    });
+    if (typeof toast !== 'undefined') toast(`${frName(home.team.displayName)} ${homeScore} – ${awayScore} ${frName(away.team.displayName)}`, 'live', '⚽', 3500);
+  }
+  lastScores[ev.id] = key;
+
+  return card;
+}
+
+function teamLogoTag(c) {
+  if (!c || !c.team) return '<span class="live-team-logo" aria-hidden="true">🏳</span>';
+  const logo = c.team.logo || '';
+  if (!logo) return '<span class="live-team-logo" aria-hidden="true">🏳</span>';
+  return `<img class="live-team-logo" src="${logo}" alt="" loading="lazy" onerror="this.outerHTML='<span class=\\'live-team-logo\\'>🏳</span>'">`;
+}
+
+const kickoffShort = (iso) => parisTime(iso); // alias → Day.js (Paris)
+
+function escapeHTML(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function stampUpdate() {
+  const el = document.getElementById('live-last-update');
+  if (!el) return;
+  const now = HAS_DAYJS ? dayjs().tz(PARIS_TZ).format('HH:mm:ss')
+                        : new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  el.textContent = `${window.t('updated')} ${now}`;
+}
+
+// Polling — every 30s while tab is visible, faster during live matches
+let liveTimer = null;
+let _lastLiveData = null;
+function startLivePolling() {
+  fetchLiveScores();
+  if (liveTimer) clearInterval(liveTimer);
+  liveTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') fetchLiveScores();
+  }, 30000);
+}
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') fetchLiveScores();
+});
+// Re-render the live block instantly when the language changes (from cache), then refresh
+document.addEventListener('langchange', () => {
+  if (_lastLiveData) renderLiveScores(_lastLiveData); fetchLiveScores();
+  const openCard = document.querySelector('.pixel-card[data-country]');
+  if (openCard) renderCountryResults(openCard.dataset.country); // re-traduit le parcours
+});
+startLivePolling();
+loadAllResults(); // charge le parcours de toutes les équipes (résultats du tournoi)
+
+/* ===========================================================
+   LOGO LOOP + PIXEL CARD — 48 nations officielles CDM 2026
+   Drapeaux flagcdn.com (images réelles → rendu correct sur Windows).
+   =========================================================== */
+const WC_GROUPS = {
+  A: ['Mexique','Afrique du Sud','Corée du Sud','Tchéquie'],
+  B: ['Canada','Bosnie-Herzégovine','Qatar','Suisse'],
+  C: ['Brésil','Maroc','Haïti','Écosse'],
+  D: ['États-Unis','Paraguay','Australie','Turquie'],
+  E: ['Allemagne','Curaçao',"Côte d'Ivoire",'Équateur'],
+  F: ['Pays-Bas','Japon','Suède','Tunisie'],
+  G: ['Belgique','Égypte','Iran','Nouvelle-Zélande'],
+  H: ['Espagne','Cap-Vert','Arabie Saoudite','Uruguay'],
+  I: ['France','Sénégal','Irak','Norvège'],
+  J: ['Argentine','Algérie','Autriche','Jordanie'],
+  K: ['Portugal','RD Congo','Ouzbékistan','Colombie'],
+  L: ['Angleterre','Croatie','Ghana','Panama'],
+};
+const ISO = {
+  'Mexique':'mx','Afrique du Sud':'za','Corée du Sud':'kr','Tchéquie':'cz',
+  'Canada':'ca','Bosnie-Herzégovine':'ba','Qatar':'qa','Suisse':'ch',
+  'Brésil':'br','Maroc':'ma','Haïti':'ht','Écosse':'gb-sct',
+  'États-Unis':'us','Paraguay':'py','Australie':'au','Turquie':'tr',
+  'Allemagne':'de','Curaçao':'cw',"Côte d'Ivoire":'ci','Équateur':'ec',
+  'Pays-Bas':'nl','Japon':'jp','Suède':'se','Tunisie':'tn',
+  'Belgique':'be','Égypte':'eg','Iran':'ir','Nouvelle-Zélande':'nz',
+  'Espagne':'es','Cap-Vert':'cv','Arabie Saoudite':'sa','Uruguay':'uy',
+  'France':'fr','Sénégal':'sn','Irak':'iq','Norvège':'no',
+  'Argentine':'ar','Algérie':'dz','Autriche':'at','Jordanie':'jo',
+  'Portugal':'pt','RD Congo':'cd','Ouzbékistan':'uz','Colombie':'co',
+  'Angleterre':'gb-eng','Croatie':'hr','Ghana':'gh','Panama':'pa',
+};
+const flagUrl = (name, w = 80) => `https://flagcdn.com/w${w}/${ISO[name] || ''}.png`;
+const groupOf = (name) => Object.keys(WC_GROUPS).find(g => WC_GROUPS[g].includes(name));
+
+(function buildFlagLoop() {
+  const track = document.getElementById('flag-loop-track');
+  if (!track) return;
+  const allNations = Object.values(WC_GROUPS).flat(); // 48 in group order
+  const chip = (name) =>
+    `<div class="flag-chip" data-country="${name.replace(/"/g, '&quot;')}" title="${name}">
+       <img src="${flagUrl(name, 80)}" srcset="${flagUrl(name, 160)} 2x" alt="${name}"
+            onerror="this.style.display='none'">
+       <span>${name}</span>
+     </div>`;
+  const html = allNations.map(chip).join('');
+  track.innerHTML = html + html; // duplicate → seamless -50% loop
+
+  // Event delegation → open the PixelCard for the clicked nation
+  track.addEventListener('click', (e) => {
+    const chipEl = e.target.closest('.flag-chip');
+    if (chipEl) openCountryCard(chipEl.dataset.country);
+  });
+})();
+
+/* ---------- Aperçu des 12 groupes (remplit le dashboard) ---------- */
+(function buildGroupsOverview() {
+  const grid = document.getElementById('groups-overview-grid');
+  if (!grid) return;
+  grid.innerHTML = Object.entries(WC_GROUPS).map(([g, teams]) => `
+    <div class="go-card">
+      <div class="go-head"><span data-i18n="group">Groupe</span> ${g}</div>
+      ${teams.map(t => `<div class="go-team" data-country="${t.replace(/"/g, '&quot;')}" title="${t}">
+        <img src="${flagUrl(t, 40)}" srcset="${flagUrl(t, 80)} 2x" alt="" onerror="this.style.display='none'">
+        <span>${t}</span>
+      </div>`).join('')}
+    </div>`).join('');
+  grid.addEventListener('click', (e) => {
+    const team = e.target.closest('.go-team');
+    if (team) openCountryCard(team.dataset.country);
+  });
+  // re-traduit "Groupe"/"Group" si la langue change (les data-i18n viennent d'être injectés)
+  if (window.applyLang && window.getLang) window.applyLang(window.getLang());
+})();
+
+/* ---------- PixelCard engine (ReactBits PixelCard, vanilla) ---------- */
+const _reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+class Pixel {
+  constructor(ctx, x, y, color, speed, delay) {
+    this.ctx = ctx;
+    this.x = x; this.y = y; this.color = color;
+    this.speed = (Math.random() * 0.8 + 0.1) * speed;
+    this.size = 0;
+    this.sizeStep = Math.random() * 0.4;
+    this.minSize = 0.5;
+    this.maxSizeInteger = 2;
+    this.maxSize = Math.random() * (this.maxSizeInteger - this.minSize) + this.minSize;
+    this.delay = delay;
+    this.counter = 0;
+    this.counterStep = Math.random() * 4 + 2;
+    this.isIdle = false;
+    this.isReverse = false;
+    this.isShimmer = false;
+  }
+  draw() {
+    const off = this.maxSizeInteger * 0.5 - this.size * 0.5;
+    this.ctx.fillStyle = this.color;
+    this.ctx.fillRect(this.x + off, this.y + off, this.size, this.size);
+  }
+  appear() {
+    this.isIdle = false;
+    if (this.counter <= this.delay) { this.counter += this.counterStep; return; }
+    if (this.size >= this.maxSize) this.isShimmer = true;
+    if (this.isShimmer) this.shimmer(); else this.size += this.sizeStep;
+    this.draw();
+  }
+  disappear() {
+    this.isShimmer = false;
+    this.counter = 0;
+    if (this.size <= 0) { this.isIdle = true; return; }
+    this.size -= 0.1;
+    this.draw();
+  }
+  shimmer() {
+    if (this.size >= this.maxSize) this.isReverse = true;
+    else if (this.size <= this.minSize) this.isReverse = false;
+    this.size += this.isReverse ? -this.speed : this.speed;
+  }
+}
+
+function attachPixelCanvas(canvas, colors, { gap = 5, speed = 0.07 } = {}) {
+  const ctx = canvas.getContext('2d');
+  let pixels = [], raf = null, w = 0, h = 0;
+
+  function build() {
+    const rect = canvas.getBoundingClientRect();
+    const dpr = window.devicePixelRatio || 1;
+    w = rect.width; h = rect.height;
+    canvas.width = w * dpr; canvas.height = h * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    pixels = [];
+    for (let x = 0; x < w; x += gap) {
+      for (let y = 0; y < h; y += gap) {
+        const color = colors[Math.floor(Math.random() * colors.length)];
+        const dx = x - w / 2, dy = y - h / 2;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        const delay = _reduceMotion ? 0 : dist * 0.6;
+        pixels.push(new Pixel(ctx, x, y, color, speed, delay));
+      }
+    }
+  }
+
+  function loop(fn) {
+    raf = requestAnimationFrame(() => loop(fn));
+    ctx.clearRect(0, 0, w, h);
+    let allIdle = true;
+    for (const p of pixels) { p[fn](); if (!p.isIdle) allIdle = false; }
+    if (fn === 'disappear' && allIdle) { cancelAnimationFrame(raf); raf = null; }
+  }
+  function stop() { if (raf) { cancelAnimationFrame(raf); raf = null; } }
+
+  return {
+    appear() { stop(); pixels.forEach(p => { p.isIdle = false; }); loop('appear'); },
+    disappear() { stop(); loop('disappear'); },
+    rebuild() { build(); },
+    build
+  };
+}
+
+/* ---------- Open / close the country PixelCard ---------- */
+let _pixelCtl = null;
+// Remplit le bas de la carte : parcours (résultats joués) si dispo, sinon adversaires de poule
+function renderCountryResults(name) {
+  const bottom = document.getElementById('pc-bottom');
+  if (!bottom) return;
+  const group = groupOf(name);
+  const cta = `<a class="pc-cta" href="CDM.html">${window.t('view_group')} ${group} →</a>`;
+  const results = getTeamResults(name);
+  if (results && results.length) {
+    const w = results.filter(r => r.result === 'W' && !r.live).length;
+    const d = results.filter(r => r.result === 'D' && !r.live).length;
+    const l = results.filter(r => r.result === 'L' && !r.live).length;
+    const chips = results.map(r => `
+      <span class="pc-res-chip res-${r.result.toLowerCase()} ${r.live ? 'is-live' : ''}" title="${name} ${r.gf}–${r.ga} ${r.opp}">
+        <img src="${flagUrl(r.opp, 40)}" alt="" onerror="this.style.display='none'"> ${r.gf}–${r.ga}
+      </span>`).join('');
+    bottom.innerHTML = `
+      <div class="pc-results">
+        <div class="pc-opp-label">${window.t('results_label')}</div>
+        <div class="pc-res-summary"><b>${w}</b>${window.t('res_w')} · <b>${d}</b>${window.t('res_d')} · <b>${l}</b>${window.t('res_l')}</div>
+        <div class="pc-res-row">${chips}</div>
+        ${cta}
+      </div>`;
+  } else {
+    const opponents = (WC_GROUPS[group] || []).filter(t => t !== name);
+    const oppHTML = opponents.map(o => `
+      <div class="pc-opp" title="${o}">
+        <img src="${flagUrl(o, 40)}" srcset="${flagUrl(o, 80)} 2x" alt="${o}" onerror="this.style.display='none'">
+        <span>${o}</span>
+      </div>`).join('');
+    bottom.innerHTML = `
+      <div class="pc-opponents">
+        <div class="pc-opp-label">${window.t('opponents_label')}</div>
+        <div class="pc-opp-row">${oppHTML}</div>
+        ${cta}
+      </div>`;
+  }
+}
+
+function openCountryCard(name) {
+  const backdrop = document.getElementById('country-modal-backdrop');
+  if (!backdrop || !ISO[name]) return;
+  const group = groupOf(name);
+
+  backdrop.innerHTML = `
+    <div class="pixel-card" id="pixel-card" data-country="${name.replace(/"/g, '&quot;')}">
+      <canvas></canvas>
+      <button class="pc-close" onclick="closeCountryCard()" aria-label="Fermer">✕</button>
+      <div class="pixel-card-inner">
+        <div class="pc-group">${window.t('group')} ${group}</div>
+        <div>
+          <img class="pc-flag" src="${flagUrl(name, 320)}" alt="${name}" onerror="this.style.display='none'">
+          <div class="pc-name">${name}</div>
+          <div class="pc-sub">${window.t('wc2026')}</div>
+        </div>
+        <div class="pc-bottom" id="pc-bottom"></div>
+      </div>
+    </div>`;
+
+  renderCountryResults(name);
+  if (!_allEvents) loadAllResults(); // si pas encore chargé, on récupère puis on re-rend
+
+  backdrop.classList.add('open');
+
+  const card = document.getElementById('pixel-card');
+  const canvas = card.querySelector('canvas');
+  // DA du site : palette or / blanc / rouge
+  const palette = ['#fbc531', '#f5d76e', '#ffffff', '#ff4757', '#ffd966'];
+  _pixelCtl = attachPixelCanvas(canvas, palette, { gap: 5, speed: 0.08 });
+  _pixelCtl.build();   // synchrone : getBoundingClientRect force le layout → canvas dimensionné
+  _pixelCtl.appear();  // reveal animé on open
+  // Re-trigger on hover (faithful to ReactBits behaviour)
+  card.addEventListener('mouseenter', () => _pixelCtl && _pixelCtl.appear());
+  card.addEventListener('mouseleave', () => _pixelCtl && _pixelCtl.disappear());
+
+  // Close on backdrop click / Escape
+  backdrop.onclick = (e) => { if (e.target === backdrop) closeCountryCard(); };
+}
+function closeCountryCard() {
+  const backdrop = document.getElementById('country-modal-backdrop');
+  if (!backdrop) return;
+  backdrop.classList.remove('open');
+  if (_pixelCtl) { _pixelCtl.disappear(); _pixelCtl = null; }
+  setTimeout(() => { if (!backdrop.classList.contains('open')) backdrop.innerHTML = ''; }, 300);
+}
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCountryCard(); });
+</script>
+</body>
+</html>

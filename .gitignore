@@ -1,0 +1,11 @@
+# Outils locaux / Claude Code
+.claude/
+
+# Vercel
+.vercel/
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+*.log
+node_modules/

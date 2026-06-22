@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Overlay scores live — CDM 2026 (OBS)</title>
+<meta name="robots" content="noindex">
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@600;700;800;900&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --gold: #fbc531; --red: #ff4757; --green: #2ed573; --white: #f2f6fa;
+    --bg: rgba(11, 17, 23, 0.92);
+    --font-d: 'Bebas Neue', Impact, sans-serif;
+    --font-b: 'Inter', system-ui, sans-serif;
+  }
+  /* Fond TRANSPARENT : indispensable pour OBS (Browser Source) */
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden; font-family: var(--font-b); -webkit-font-smoothing: antialiased; }
+
+  /* Conteneur ancré dans un coin (réglable via ?pos=) */
+  #bug { position: fixed; transform-origin: top left; }
+  #bug.top-left     { top: 18px; left: 18px; transform-origin: top left; }
+  #bug.top-right    { top: 18px; right: 18px; transform-origin: top right; }
+  #bug.bottom-left  { bottom: 18px; left: 18px; transform-origin: bottom left; }
+  #bug.bottom-right { bottom: 18px; right: 18px; transform-origin: bottom right; }
+
+  .scorebug {
+    display: inline-flex; align-items: stretch;
+    background: var(--bg);
+    border: 1px solid rgba(255,255,255,0.08);
+    border-top: 3px solid var(--gold);
+    border-radius: 10px; overflow: hidden;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.55);
+    opacity: 0; transform: translateY(-8px);
+    transition: opacity .35s ease, transform .35s ease;
+  }
+  .scorebug.show { opacity: 1; transform: translateY(0); }
+  .scorebug.state-in { border-top-color: var(--red); }
+  .scorebug.state-post { border-top-color: var(--green); }
+
+  .sb-team { display: flex; align-items: center; gap: 9px; padding: 9px 13px; }
+  .sb-team.rev { flex-direction: row-reverse; }
+  .sb-logo { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.5)); }
+  .sb-abbr { font-size: 18px; font-weight: 800; letter-spacing: 0.04em; color: var(--white); }
+
+  .sb-score { display: flex; align-items: center; gap: 9px; padding: 6px 15px; background: rgba(0,0,0,0.32); font-family: var(--font-d); font-size: 32px; line-height: 1; color: #fff; }
+  .sb-score .v { min-width: 18px; text-align: center; transition: transform .3s, color .3s; }
+  .sb-score .v.bump { animation: bump .6s cubic-bezier(.34,1.56,.64,1); }
+  .scorebug.state-in .sb-score .v { color: #fff; }
+  .sb-sep { opacity: .35; }
+  @keyframes bump { 0%{transform:scale(1)} 40%{transform:scale(1.5); color:var(--gold)} 100%{transform:scale(1)} }
+
+  .sb-status { display: flex; align-items: center; gap: 7px; padding: 9px 13px; font-size: 14px; font-weight: 800; letter-spacing: 0.03em; color: var(--gold); white-space: nowrap; }
+  .sb-status.live { color: var(--red); }
+  .sb-status.post { color: var(--green); }
+  .sb-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
+  .sb-status.live .sb-dot { animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,71,87,.5)} 50%{box-shadow:0 0 0 6px rgba(255,71,87,0)} }
+
+  /* Flash "BUT !" quand un score augmente */
+  .scorebug.goal { animation: goalflash 1.1s ease; }
+  @keyframes goalflash { 0%,100%{box-shadow:0 8px 28px rgba(0,0,0,.55)} 30%{box-shadow:0 0 0 3px var(--gold), 0 8px 34px rgba(251,197,49,.6)} }
+
+  .sb-extra { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.45); padding: 9px 11px; align-self: center; }
+</style>
+</head>
+<body>
+<div id="bug"></div>
+
+<script>
+/* ============================================================
+   Overlay OBS — scores en direct Coupe du Monde 2026
+   Source ESPN (non officielle). Autonome, fond transparent.
+
+   À utiliser dans OBS → Source "Navigateur" (Browser Source) :
+   - URL : .../overlay.html
+   - Largeur ~480, Hauteur ~120, fond transparent (par défaut)
+
+   Options via l'URL :
+   - ?pos=top-left | top-right | bottom-left | bottom-right   (défaut top-left)
+   - ?team=France        → épingle le match d'une équipe précise
+   - ?scale=1.3          → agrandit / réduit l'overlay
+   - ?hideEmpty=1        → cache tout s'il n'y a aucun match
+   Exemples :
+     overlay.html?team=France&pos=top-right
+     overlay.html?scale=1.4&pos=bottom-left
+   ============================================================ */
+(function () {
+  const ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+  const P = new URLSearchParams(location.search);
+  const POS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(P.get('pos')) ? P.get('pos') : 'top-left';
+  const TEAM = (P.get('team') || '').trim().toLowerCase();
+  const SCALE = Math.min(3, Math.max(0.5, parseFloat(P.get('scale')) || 1));
+  const HIDE_EMPTY = P.get('hideEmpty') === '1';
+  const REFRESH_MS = 15000;   // rafraîchissement scores
+  const ROTATE_MS = 10000;    // rotation entre matchs en direct
+
+  const bug = document.getElementById('bug');
+  bug.className = POS;
+  bug.style.transform = `scale(${SCALE})`;
+
+  let liveList = [], rotateIdx = 0, rotateTimer = null;
+  const lastScore = {}; // id -> "h-a"
+
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const parisTime = (iso) => { try { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }); } catch (e) { return ''; } };
+  const abbr = (c) => (c && c.team && (c.team.abbreviation || c.team.shortDisplayName)) || '—';
+  const logo = (c) => (c && c.team && c.team.logo) || '';
+  const matchesTeam = (ev) => {
+    if (!TEAM) return true;
+    return (ev.competitions[0].competitors || []).some(c => {
+      const t = c.team || {};
+      return [t.displayName, t.shortDisplayName, t.abbreviation, t.name, t.location]
+        .filter(Boolean).some(n => n.toLowerCase().includes(TEAM));
+    });
+  };
+
+  function render(ev) {
+    if (!ev) { bug.querySelector('.scorebug')?.classList.remove('show'); if (HIDE_EMPTY) bug.innerHTML = ''; return; }
+    const comp = ev.competitions[0];
+    const t = comp.status.type;
+    const state = t.state; // pre | in | post
+    const cs = comp.competitors || [];
+    const home = cs.find(c => c.homeAway === 'home') || cs[0];
+    const away = cs.find(c => c.homeAway === 'away') || cs[1];
+    const hs = state === 'pre' ? '–' : (home && home.score !== undefined ? home.score : '–');
+    const as = state === 'pre' ? '–' : (away && away.score !== undefined ? away.score : '–');
+
+    const statusTxt = state === 'in' ? (comp.status.displayClock || t.shortDetail || 'LIVE')
+                    : state === 'post' ? (t.shortDetail || 'FT')
+                    : parisTime(ev.date);
+    const statusCls = state === 'in' ? 'live' : state === 'post' ? 'post' : 'pre';
+
+    let card = bug.querySelector('.scorebug');
+    const fresh = !card || card.dataset.id !== ev.id;
+    if (fresh) {
+      bug.innerHTML = `
+        <div class="scorebug state-${state}" data-id="${ev.id}">
+          <div class="sb-team">
+            ${logo(home) ? `<img class="sb-logo" src="${logo(home)}" alt="">` : ''}
+            <span class="sb-abbr">${esc(abbr(home))}</span>
+          </div>
+          <div class="sb-score">
+            <span class="v" data-s="h">${esc(hs)}</span><span class="sb-sep">–</span><span class="v" data-s="a">${esc(as)}</span>
+          </div>
+          <div class="sb-team rev">
+            ${logo(away) ? `<img class="sb-logo" src="${logo(away)}" alt="">` : ''}
+            <span class="sb-abbr">${esc(abbr(away))}</span>
+          </div>
+          <div class="sb-status ${statusCls}">${statusCls === 'pre' ? '🕐' : '<span class="sb-dot"></span>'} ${esc(statusTxt)}</div>
+        </div>`;
+      card = bug.querySelector('.scorebug');
+      requestAnimationFrame(() => card.classList.add('show'));
+    } else {
+      // mise à jour en place (pas de re-création → pas de clignotement)
+      card.className = `scorebug show state-${state}`;
+      card.querySelector('[data-s="h"]').textContent = hs;
+      card.querySelector('[data-s="a"]').textContent = as;
+      const st = card.querySelector('.sb-status');
+      st.className = `sb-status ${statusCls}`;
+      st.innerHTML = `${statusCls === 'pre' ? '🕐' : '<span class="sb-dot"></span>'} ${esc(statusTxt)}`;
+    }
+
+    // détection de but → flash + bump
+    const key = `${hs}-${as}`;
+    if (state === 'in' && lastScore[ev.id] && lastScore[ev.id] !== key) {
+      card.classList.remove('goal'); void card.offsetWidth; card.classList.add('goal');
+      card.querySelectorAll('.v').forEach(v => { v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump'); });
+    }
+    lastScore[ev.id] = key;
+  }
+
+  function pickAndRender(events) {
+    const evs = (events || []).filter(e => e.competitions && e.competitions[0]).filter(matchesTeam);
+    if (rotateTimer) { clearInterval(rotateTimer); rotateTimer = null; }
+
+    const live = evs.filter(e => e.competitions[0].status.type.state === 'in');
+    if (live.length) {
+      if (rotateIdx >= live.length) rotateIdx = 0;
+      liveList = live;
+      render(live[rotateIdx]);
+      if (live.length > 1 && !TEAM) {
+        rotateTimer = setInterval(() => { rotateIdx = (rotateIdx + 1) % live.length; render(live[rotateIdx]); }, ROTATE_MS);
+      }
+      return;
+    }
+    // pas de live → prochain match (ou dernier terminé si team épinglée), sinon rien
+    const order = { pre: 0, post: 1 };
+    const rest = evs.filter(e => e.competitions[0].status.type.state !== 'in')
+      .sort((a, b) => new Date(a.date) - new Date(b.date));
+    const upcoming = rest.find(e => e.competitions[0].status.type.state === 'pre');
+    const lastPost = [...rest].reverse().find(e => e.competitions[0].status.type.state === 'post');
+    render(upcoming || (TEAM ? lastPost : null) || null);
+  }
+
+  async function tick() {
+    try {
+      const res = await fetch(ENDPOINT, { cache: 'no-store' });
+      if (!res.ok) throw new Error('HTTP ' + res.status);
+      const data = await res.json();
+      pickAndRender(data.events || []);
+    } catch (e) { /* garde le dernier affichage */ }
+  }
+
+  tick();
+  setInterval(tick, REFRESH_MS);
+})();
+</script>
+</body>
+</html>
