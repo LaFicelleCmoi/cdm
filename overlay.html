@@ -265,7 +265,7 @@
       card.querySelector('[data-s="a"]').textContent = as;
       const st = card.querySelector('.sb-status');
       st.className = `sb-status ${statusCls}`;
-      st.textContent = esc(statusTxt);
+      st.textContent = statusTxt; // textContent échappe déjà — pas de esc() ici
     }
 
     // détection de but → flash + bump
