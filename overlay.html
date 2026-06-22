@@ -36,6 +36,7 @@
   .scorebug.show { opacity: 1; transform: translateY(0); }
   .scorebug.state-in { border-top-color: var(--red); }
   .scorebug.state-post { border-top-color: var(--green); }
+  .scorebug.delayed { border-top-color: #f9a825; }
 
   .sb-team { display: flex; align-items: center; gap: 9px; padding: 9px 13px; }
   .sb-team.rev { flex-direction: row-reverse; }
@@ -58,6 +59,7 @@
   @keyframes bump { 0%{transform:scale(1)} 40%{transform:scale(1.5); color:var(--gold)} 100%{transform:scale(1)} }
 
   .sb-status { display: flex; align-items: center; gap: 5px; padding: 9px 14px; font-size: 15px; font-weight: 800; letter-spacing: 0.02em; color: var(--white); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sb-status.delayed { color: #f9a825; }
   .sb-add { color: var(--green); background: rgba(46,213,115,0.16); border-radius: 4px; padding: 0 5px; font-weight: 800; }
   @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,71,87,.5)} 50%{box-shadow:0 0 0 6px rgba(255,71,87,0)} }
 
@@ -297,17 +299,20 @@
     const hs = state === 'pre' ? '–' : (home && home.score !== undefined ? home.score : '–');
     const as = state === 'pre' ? '–' : (away && away.score !== undefined ? away.score : '–');
 
-    const statusTxt = state === 'in' ? (comp.status.displayClock || t.shortDetail || 'LIVE')
+    // Match interrompu : ESPN garde state="in" mais name=STATUS_DELAYED/SUSPENDED/ABANDONED
+    const interrupted = state === 'in' && /delay|suspend|abandon|interrupt|postpon/i.test((t.name || '') + ' ' + (t.description || ''));
+    const statusTxt = interrupted ? '⏸ Interrompu'
+                    : state === 'in' ? (comp.status.displayClock || t.shortDetail || 'LIVE')
                     : state === 'post' ? (t.shortDetail || 'FT')
                     : parisTime(ev.date);
-    const statusCls = state === 'in' ? 'live' : state === 'post' ? 'post' : 'pre';
+    const statusCls = interrupted ? 'delayed' : state === 'in' ? 'live' : state === 'post' ? 'post' : 'pre';
 
     let card = bug.querySelector('.scorebug');
     const fresh = !card || card.dataset.id !== ev.id;
     if (fresh) {
       if (card) card.remove();
       card = document.createElement('div');
-      card.className = `scorebug state-${state}`;
+      card.className = `scorebug state-${state}${interrupted ? ' delayed' : ''}`;
       card.dataset.id = ev.id;
       card.innerHTML = `
           <div class="sb-status ${statusCls}">${clockHTML(statusTxt)}</div>
@@ -326,7 +331,7 @@
       requestAnimationFrame(() => card.classList.add('show'));
     } else {
       // mise à jour en place (pas de re-création → pas de clignotement)
-      card.className = `scorebug show state-${state}`;
+      card.className = `scorebug show state-${state}${interrupted ? ' delayed' : ''}`;
       card.querySelector('[data-s="h"]').textContent = hs;
       card.querySelector('[data-s="a"]').textContent = as;
       const st = card.querySelector('.sb-status');
