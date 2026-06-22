@@ -98,6 +98,7 @@ body::before {
 .lw-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .live-widget.state-in .lw-dot { animation: pulse-live 1.4s infinite; }
 .lw-clock { font-family: var(--font-d); font-size: 0.95em; letter-spacing: 0.04em; color: var(--white); }
+.lw-add { color: var(--green-b, #2ed573); background: rgba(46,213,115,0.16); border-radius: 5px; padding: 0 5px; margin-left: 4px; font-family: var(--font-b); font-size: 0.82em; font-weight: 800; }
 .live-widget.state-in .lw-clock { color: var(--live); }
 .live-widget.state-pre .lw-clock { color: var(--gold); }
 .lw-countdown { font-family: var(--font-b); font-weight: 800; font-size: 0.8em; font-variant-numeric: tabular-nums; }
@@ -1826,6 +1827,12 @@ checkChampion();
   function abbr(comp) {
     return (comp && comp.team && (comp.team.abbreviation || comp.team.shortDisplayName)) || '—';
   }
+  // Temps additionnel en vert : "90'+3'" -> "90'" + pastille "+3'"
+  function clockAdd(txt) {
+    const m = String(txt == null ? '' : txt).match(/^(.*?)(\+\s*\d+'?)\s*$/);
+    if (!m) return esc(txt);
+    return `${esc(m[1].trim())}<span class="lw-add">${esc(m[2].replace(/\s+/g, ''))}</span>`;
+  }
 
   function render(ev, extraLive) {
     const comp = ev.competitions[0];
@@ -1844,7 +1851,7 @@ checkChampion();
         : `<span class="lw-badge pre"><span class="lw-dot"></span> ${window.t('status_pre')}</span>`;
     const clockHTML = state === 'pre'
       ? `<span class="lw-clock lw-countdown" data-kickoff="${ev.date}">${countdownLabel(ev.date)}</span>`
-      : `<span class="lw-clock">${esc(state === 'in' ? (comp.status.displayClock || t.shortDetail || '') : (t.shortDetail || 'FT'))}</span>`;
+      : `<span class="lw-clock">${state === 'in' ? clockAdd(comp.status.displayClock || t.shortDetail || '') : esc(t.shortDetail || 'FT')}</span>`;
 
     const footer = state === 'pre'
       ? `<div class="lw-more">${window.t('kickoff_word')} ${parisTime(ev.date)}</div>`

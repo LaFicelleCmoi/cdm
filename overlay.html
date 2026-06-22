@@ -57,7 +57,8 @@
   .sb-comp { width: 26px; height: 26px; object-fit: contain; flex-shrink: 0; }
   @keyframes bump { 0%{transform:scale(1)} 40%{transform:scale(1.5); color:var(--gold)} 100%{transform:scale(1)} }
 
-  .sb-status { display: flex; align-items: center; padding: 9px 14px; font-size: 15px; font-weight: 800; letter-spacing: 0.02em; color: var(--white); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sb-status { display: flex; align-items: center; gap: 5px; padding: 9px 14px; font-size: 15px; font-weight: 800; letter-spacing: 0.02em; color: var(--white); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .sb-add { color: var(--green); background: rgba(46,213,115,0.16); border-radius: 4px; padding: 0 5px; font-weight: 800; }
   @keyframes pulse { 0%,100%{box-shadow:0 0 0 0 rgba(255,71,87,.5)} 50%{box-shadow:0 0 0 6px rgba(255,71,87,0)} }
 
   /* Flash "BUT !" quand un score augmente */
@@ -126,6 +127,12 @@
   const parisTime = (iso) => { try { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }); } catch (e) { return ''; } };
   const abbr = (c) => (c && c.team && (c.team.abbreviation || c.team.shortDisplayName)) || '—';
   const logo = (c) => (c && c.team && c.team.logo) || '';
+  // Met en valeur le temps additionnel : "90'+3'" -> "90'" + pastille verte "+3'"
+  const clockHTML = (txt) => {
+    const m = String(txt == null ? '' : txt).match(/^(.*?)(\+\s*\d+'?)\s*$/);
+    if (!m) return esc(txt);
+    return `${esc(m[1].trim())}<span class="sb-add">${esc(m[2].replace(/\s+/g, ''))}</span>`;
+  };
   const matchesTeam = (ev) => {
     if (!TEAM) return true;
     return (ev.competitions[0].competitors || []).some(c => {
@@ -283,7 +290,7 @@
       card.className = `scorebug state-${state}`;
       card.dataset.id = ev.id;
       card.innerHTML = `
-          <div class="sb-status ${statusCls}">${esc(statusTxt)}</div>
+          <div class="sb-status ${statusCls}">${clockHTML(statusTxt)}</div>
           <div class="sb-team">
             ${logo(home) ? `<img class="sb-logo" src="${logo(home)}" alt="">` : ''}
             <span class="sb-tcol"><span class="sb-abbr">${esc(abbr(home))}</span><span class="sb-cards" data-side="home"></span></span>
@@ -304,7 +311,7 @@
       card.querySelector('[data-s="a"]').textContent = as;
       const st = card.querySelector('.sb-status');
       st.className = `sb-status ${statusCls}`;
-      st.textContent = statusTxt; // textContent échappe déjà — pas de esc() ici
+      st.innerHTML = clockHTML(statusTxt); // clockHTML échappe + colore le temps additionnel
     }
 
     // détection de but → flash + bump
