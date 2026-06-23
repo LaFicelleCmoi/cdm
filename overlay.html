@@ -69,20 +69,21 @@
 
   .sb-extra { font-size: 11px; font-weight: 700; color: rgba(255,255,255,0.45); padding: 9px 11px; align-self: center; }
 
-  /* Ligne d'événement (buteur / carton / penalty) sous le scorebug */
+  /* Liste des événements (buteurs / cartons / penalty) sous le scorebug */
   .sb-feed {
-    display: inline-flex; align-items: center; gap: 8px;
+    display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px;
     background: var(--bg); border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px; padding: 6px 12px; max-width: 100%;
+    border-radius: 8px; padding: 7px 12px; max-width: 100%;
     opacity: 0; transform: translateY(-6px); transition: opacity .3s, transform .3s;
     font-size: 14px; font-weight: 700; color: var(--white);
   }
   .sb-feed.show { opacity: 1; transform: translateY(0); }
   .sb-feed.flash { animation: feedflash 1.2s ease; }
   @keyframes feedflash { 0%,100%{ box-shadow:0 0 0 0 rgba(251,197,49,0) } 30%{ box-shadow:0 0 0 3px var(--gold) } }
+  .fe-row { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
   .sb-feed .fe-emoji { font-size: 16px; }
-  .sb-feed .fe-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
-  .sb-feed.red .fe-clock { color: var(--red); }
+  .sb-feed .fe-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 34px; }
+  .fe-row.red .fe-clock { color: var(--red); }
   .sb-feed.cooling { border-color: rgba(56,189,248,0.45); }
   .sb-feed.cooling .fe-player { color: #7fdbff; }
   .sb-feed .fe-team { color: #cdd9e6; font-weight: 800; letter-spacing: .02em; }
@@ -245,19 +246,22 @@
     if ((evCache[ev.id] || {}).cooling) {
       const el = feedEl();
       el.className = 'sb-feed show cooling';
-      el.innerHTML = `<span class="fe-emoji">💧</span><span class="fe-player">Pause fraîcheur</span>`;
+      el.innerHTML = `<div class="fe-row"><span class="fe-emoji">💧</span><span class="fe-player">Pause fraîcheur</span></div>`;
       return;
     }
-    const last = list[list.length - 1]; // le plus récent
-    if (!last) { if (f) f.classList.remove('show'); return; }
+    if (!list.length) { if (f) f.classList.remove('show'); return; }
     const el = feedEl();
-    const sig = `${last.kind}|${last.clock}|${last.player}`;
+    const newest = list[list.length - 1];
+    const sig = `${newest.kind}|${newest.clock}|${newest.player}`;
     const isNew = feedSig[ev.id] && feedSig[ev.id] !== sig;
-    const ab = teamAbbrOf(ev, last.team);
-    const teamTag = ab ? `<span class="fe-team">${esc(ab)}</span>` : '';
-    const tag = FEED_TAG[last.kind] ? `<span class="fe-tag">${FEED_TAG[last.kind]}</span>` : '';
-    el.className = 'sb-feed show' + (last.kind === 'red' ? ' red' : '');
-    el.innerHTML = `<span class="fe-emoji">${FEED_EMOJI[last.kind]}</span><span class="fe-clock">${esc(last.clock)}</span>${teamTag}<span class="fe-player">${esc(lastName(last.player))}</span>${tag}`;
+    // TOUS les événements, du plus récent au plus ancien
+    el.innerHTML = list.slice().reverse().map(it => {
+      const ab = teamAbbrOf(ev, it.team);
+      const teamTag = ab ? `<span class="fe-team">${esc(ab)}</span>` : '';
+      const tg = FEED_TAG[it.kind] ? `<span class="fe-tag">${FEED_TAG[it.kind]}</span>` : '';
+      return `<div class="fe-row${it.kind === 'red' ? ' red' : ''}"><span class="fe-emoji">${FEED_EMOJI[it.kind]}</span><span class="fe-clock">${esc(it.clock)}</span>${teamTag}<span class="fe-player">${esc(lastName(it.player))}</span>${tg}</div>`;
+    }).join('');
+    el.className = 'sb-feed show list';
     if (isNew) { void el.offsetWidth; el.classList.add('flash'); }
     feedSig[ev.id] = sig;
   }

@@ -129,6 +129,7 @@ body::before {
 .lwf-em { margin-right: 4px; }
 .lwf-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; }
 .lwf-team { color: #cdd9e6; font-weight: 800; }
+.lwf-row { line-height: 1.65; }
 
 @media (max-width: 900px) {
   /* Le widget passe en barre fixe en bas : on réserve la place pour ne pas masquer le footer */
@@ -1918,15 +1919,18 @@ checkChampion();
         feed.classList.add('show', 'cooling');
       } else {
         feed.classList.remove('cooling');
-        const last = notable[notable.length - 1];
-        if (!last) { feed.classList.remove('show'); }
+        if (!notable.length) { feed.classList.remove('show'); }
         else {
-          const tg = MatchEvents.tag(last);
-          const tag = tg ? ` (${tg})` : '';
-          const c0 = (ev.competitions[0].competitors || []).find(x => x.team && x.team.displayName === last.team);
-          const ab = c0 ? (c0.team.abbreviation || c0.team.shortDisplayName || '') : '';
-          const teamTag = ab ? `<span class="lwf-team">${esc(ab)}</span> ` : '';
-          feed.innerHTML = `<span class="lwf-em">${MatchEvents.emoji(last)}</span><span class="lwf-clock">${esc(last.clock)}</span> ${teamTag}${esc(MatchEvents.lastName(last.player))}${tag}`;
+          const cs0 = ev.competitions[0].competitors || [];
+          // TOUS les événements, du plus récent au plus ancien
+          feed.innerHTML = notable.slice().reverse().map(e => {
+            const tg = MatchEvents.tag(e);
+            const tag = tg ? ` (${tg})` : '';
+            const c0 = cs0.find(x => x.team && x.team.displayName === e.team);
+            const ab = c0 ? (c0.team.abbreviation || c0.team.shortDisplayName || '') : '';
+            const teamTag = ab ? `<span class="lwf-team">${esc(ab)}</span> ` : '';
+            return `<div class="lwf-row"><span class="lwf-em">${MatchEvents.emoji(e)}</span><span class="lwf-clock">${esc(e.clock)}</span> ${teamTag}${esc(MatchEvents.lastName(e.player))}${tag}</div>`;
+          }).join('');
           feed.classList.add('show');
         }
       }
