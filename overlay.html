@@ -85,6 +85,7 @@
   .sb-feed.red .fe-clock { color: var(--red); }
   .sb-feed.cooling { border-color: rgba(56,189,248,0.45); }
   .sb-feed.cooling .fe-player { color: #7fdbff; }
+  .sb-feed .fe-team { color: #cdd9e6; font-weight: 800; letter-spacing: .02em; }
   .sb-feed .fe-player { color: #fff; }
   .sb-feed .fe-tag { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: .04em; }
 </style>
@@ -152,11 +153,7 @@
   /* ---- Événements du match (buteurs/cartons/penalty) — inline, autonome ---- */
   const SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
   const evCache = {}; // id -> {ts, list}
-  // --- Feed dynamique : défilement des événements récents ---
-  const FEED_ROTATE_MS = 4500;  // durée d'affichage par événement
-  const MAX_FEED = 6;           // ne fait défiler que les N plus récents
-  let feedItems = [], feedPos = 0, feedTimer = null, feedMatchId = null, feedKnownSig = '';
-  const sigOf = (e) => `${e.kind}|${e.clock}|${e.player}`;
+  const feedSig = {}; // id -> signature du dernier event affiché (flash sur nouveauté)
   const FEED_EMOJI = { goal: '⚽', pen: '⚽', freekick: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨' };
   const FEED_TAG = { pen: 'PEN', freekick: 'CF', owngoal: 'CSC', penmiss: 'PEN ✗' };
   function evKind(t) {
@@ -230,62 +227,39 @@
     fill('away', away);
   }
 
-  function renderFeedItem(item, flash) {
-    const el = feedEl();
-    if (!item) { el.classList.remove('show'); return; }
-    const tag = FEED_TAG[item.kind] ? `<span class="fe-tag">${FEED_TAG[item.kind]}</span>` : '';
-    el.innerHTML = `<span class="fe-emoji">${FEED_EMOJI[item.kind]}</span><span class="fe-clock">${esc(item.clock)}</span><span class="fe-player">${esc(lastName(item.player))}</span>${tag}`;
-    el.className = 'sb-feed show' + (item.kind === 'red' ? ' red' : '');
-    if (flash) { void el.offsetWidth; el.classList.add('flash'); }
-  }
-  function stopFeedRotation() { if (feedTimer) { clearInterval(feedTimer); feedTimer = null; } }
-  function startFeedRotation() {
-    stopFeedRotation();
-    if (feedItems.length <= 1) return; // rien à faire défiler
-    feedTimer = setInterval(() => {
-      if (feedItems.length <= 1) return;
-      feedPos = (feedPos + 1) % feedItems.length;
-      renderFeedItem(feedItems[feedPos], false);
-    }, FEED_ROTATE_MS);
+  // Abréviation de l'équipe d'un événement (via les compétiteurs du match)
+  function teamAbbrOf(ev, teamName) {
+    if (!teamName) return '';
+    const c = (ev.competitions[0].competitors || []).find(x => x.team && x.team.displayName === teamName);
+    return c ? (c.team.abbreviation || c.team.shortDisplayName || '') : '';
   }
 
-  // Feed dynamique : fait défiler les événements récents ; priorité + flash sur un nouvel événement
+  // Affiche le dernier événement notable sous le score (statique) + l'équipe du joueur
   async function updateFeed(ev) {
     const f = bug.querySelector('.sb-feed');
     const state = ev && ev.competitions[0].status.type.state;
-    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); feedItems = []; feedMatchId = null; stopFeedRotation(); return; }
+    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); return; }
     const list = await fetchEv(ev.id);
     paintCards(list, ev); // rappel cartons par équipe
-    // Pause fraîcheur en cours → encart spécial prioritaire (on stoppe le défilement)
+    // Pause fraîcheur en cours → encart spécial prioritaire
     if ((evCache[ev.id] || {}).cooling) {
-      stopFeedRotation();
       const el = feedEl();
       el.className = 'sb-feed show cooling';
       el.innerHTML = `<span class="fe-emoji">💧</span><span class="fe-player">Pause fraîcheur</span>`;
-      feedItems = (list || []).slice(-MAX_FEED); feedMatchId = ev.id;
       return;
     }
-    const items = (list || []).slice(-MAX_FEED); // N plus récents (déjà filtrés "feed")
-    if (!items.length) { if (f) f.classList.remove('show'); feedItems = []; stopFeedRotation(); return; }
-
-    const newestSig = sigOf(items[items.length - 1]);
-    const matchChanged = feedMatchId !== ev.id;
-    feedItems = items;
-    feedMatchId = ev.id;
-
-    if (matchChanged) {
-      feedPos = items.length - 1;
-      feedKnownSig = newestSig;
-      renderFeedItem(items[feedPos], false);
-      startFeedRotation();
-    } else if (newestSig !== feedKnownSig) {
-      feedKnownSig = newestSig;          // nouvel événement → on le met en avant
-      feedPos = items.length - 1;
-      renderFeedItem(items[feedPos], true);
-      startFeedRotation();               // relance le cycle pour le laisser à l'écran
-    } else if (!feedTimer) {
-      startFeedRotation();               // s'assure que le défilement tourne
-    }
+    const last = list[list.length - 1]; // le plus récent
+    if (!last) { if (f) f.classList.remove('show'); return; }
+    const el = feedEl();
+    const sig = `${last.kind}|${last.clock}|${last.player}`;
+    const isNew = feedSig[ev.id] && feedSig[ev.id] !== sig;
+    const ab = teamAbbrOf(ev, last.team);
+    const teamTag = ab ? `<span class="fe-team">${esc(ab)}</span>` : '';
+    const tag = FEED_TAG[last.kind] ? `<span class="fe-tag">${FEED_TAG[last.kind]}</span>` : '';
+    el.className = 'sb-feed show' + (last.kind === 'red' ? ' red' : '');
+    el.innerHTML = `<span class="fe-emoji">${FEED_EMOJI[last.kind]}</span><span class="fe-clock">${esc(last.clock)}</span>${teamTag}<span class="fe-player">${esc(lastName(last.player))}</span>${tag}`;
+    if (isNew) { void el.offsetWidth; el.classList.add('flash'); }
+    feedSig[ev.id] = sig;
   }
 
   function render(ev) {
