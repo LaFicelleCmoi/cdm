@@ -1171,7 +1171,7 @@ function renderCountryResults(name) {
   const bottom = document.getElementById('pc-bottom');
   if (!bottom) return;
   const group = groupOf(name);
-  const cta = `<a class="pc-cta" href="CDM.html">${window.t('view_group')} ${group} →</a>`;
+  const cta = `<a class="pc-cta" href="CDM.html?group=${encodeURIComponent(group)}">${window.t('view_group')} ${group} →</a>`;
   const results = getTeamResults(name);
   if (results && results.length) {
     const w = results.filter(r => r.result === 'W' && !r.live).length;

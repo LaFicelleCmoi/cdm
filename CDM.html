@@ -170,6 +170,8 @@ body::before {
 .groups-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 420px), 1fr)); gap: 18px; max-width: 1500px; margin: 0 auto; }
 .group-card { background: rgba(15, 25, 35, 0.85); border: 1px solid var(--border); border-radius: var(--r); overflow: hidden; transition: transform 0.18s, box-shadow 0.18s; backdrop-filter: blur(10px); }
 .group-card:hover { transform: translateY(-3px); box-shadow: 0 16px 40px rgba(0,0,0,0.6); border-color: rgba(251, 197, 49, 0.3); }
+.group-card.group-flash { animation: groupFlash 3s ease; }
+@keyframes groupFlash { 0%, 100% { box-shadow: 0 8px 24px rgba(0,0,0,0.5); border-color: var(--border); } 15%, 55% { box-shadow: 0 0 0 4px rgba(251,197,49,0.55), 0 16px 44px rgba(0,0,0,0.6); border-color: var(--gold); } }
 .group-card-header { background: linear-gradient(135deg, var(--red2), #7a1616); padding: 10px 16px; display: flex; align-items: center; justify-content: space-between; }
 .group-card-title { font-family: var(--font-d); font-size: 1.5em; letter-spacing: 0.06em; color: #fff; }
 .group-card-sub { font-size: 0.7em; font-weight: 600; color: rgba(255,255,255,0.6); letter-spacing: 0.1em; text-transform: uppercase; }
@@ -1775,6 +1777,29 @@ cycleStatus = function(key, g, mn) {
 loadData();
 isInitializing = false;
 checkChampion();
+
+/* Lien "Afficher le groupe X" (depuis le dashboard) → scroll + surbrillance */
+(function focusGroupFromURL() {
+  const g = (new URLSearchParams(location.search).get('group') || '').toUpperCase();
+  if (!g) return;
+  const go = () => {
+    const card = document.getElementById('group-card-' + g);
+    if (!card) return;
+    // s'assure que la section poules est visible (avec le vrai bouton de l'onglet)
+    const sec = document.getElementById('sec-groups');
+    if (sec && !sec.classList.contains('visible')) {
+      const tab = document.querySelector('.nav-tab[onclick*="groups"]');
+      if (tab && typeof showSection === 'function') showSection('groups', tab);
+    }
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    card.classList.remove('group-flash'); void card.offsetWidth; card.classList.add('group-flash');
+    setTimeout(() => card.classList.remove('group-flash'), 3000);
+  };
+  // Les cartes de groupe existent déjà ici ; léger délai pour stabiliser la mise en page.
+  // On ré-applique après un instant au cas où la synchro live re-rende la section.
+  setTimeout(go, 250);
+  setTimeout(go, 1400);
+})();
 
 /* ===========================================================
    LIVE SCORE WIDGET (top-right) — ESPN public API, no auth.
