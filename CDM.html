@@ -2110,32 +2110,25 @@ checkChampion();
   function update(data) {
     const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
     syncSimFromEspn(events); // mirror real live/finished scores into the simulator
-    liveEvents = events.filter(e => e.competitions[0].status.type.state === 'in');
-
-    if (liveEvents.length > 0) {
-      if (rotateIdx >= liveEvents.length) rotateIdx = 0;
-      render(liveEvents[rotateIdx], liveEvents.length - 1);
-      // rotate through multiple live matches
-      if (rotateTimer) clearInterval(rotateTimer);
-      if (liveEvents.length > 1) {
-        rotateTimer = setInterval(() => {
-          try {
-            rotateIdx = (rotateIdx + 1) % liveEvents.length;
-            render(liveEvents[rotateIdx], liveEvents.length - 1);
-          } catch (e) {}
-        }, 6000);
-      }
-      return;
-    }
-    // No live match → show next upcoming today
+    const stateOf = e => e.competitions[0].status.type.state;
+    const live = events.filter(e => stateOf(e) === 'in');
+    const upcoming = events.filter(e => stateOf(e) === 'pre').sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Rotation : matchs EN DIRECT d'abord, puis les matchs À VENIR du jour (pas les terminés)
+    const rota = live.concat(upcoming);
+    liveEvents = rota;
     if (rotateTimer) { clearInterval(rotateTimer); rotateTimer = null; }
-    const upcoming = events
-      .filter(e => e.competitions[0].status.type.state === 'pre')
-      .sort((a, b) => new Date(a.date) - new Date(b.date));
-    if (upcoming.length > 0) { render(upcoming[0], 0); return; }
-    // Nothing relevant → hide
-    el.className = 'live-widget';
-    el.innerHTML = '';
+    if (rota.length === 0) { el.className = 'live-widget'; el.innerHTML = ''; return; }
+    if (rotateIdx >= rota.length) rotateIdx = 0;
+    const extra = Math.max(0, live.length - 1); // "+N en direct" : compte les AUTRES matchs live
+    render(rota[rotateIdx], extra);
+    if (rota.length > 1) {
+      rotateTimer = setInterval(() => {
+        try {
+          rotateIdx = (rotateIdx + 1) % rota.length;
+          render(rota[rotateIdx], Math.max(0, live.length - 1));
+        } catch (e) {}
+      }, 6000);
+    }
   }
 
   async function fetchLive() {
