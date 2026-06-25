@@ -130,6 +130,7 @@
   const lastScore = {}; // id -> "h-a"
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } }; // timeout fetch sûr
   const parisTime = (iso) => { try { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }); } catch (e) { return ''; } };
   const abbr = (c) => (c && c.team && (c.team.abbreviation || c.team.shortDisplayName)) || '—';
   const logo = (c) => (c && c.team && c.team.logo) || '';
@@ -171,9 +172,9 @@
   const lastName = (f) => { if (!f) return ''; const p = f.trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : f; };
   async function fetchEv(id) {
     const c = evCache[id];
-    if (c && Date.now() - c.ts < 12000) return c.list;
+    if (c && Date.now() - c.ts < 20000) return c.list;
     try {
-      const r = await fetch(SUMMARY + id, { cache: 'no-store' });
+      const r = await fetch(SUMMARY + id, { cache: 'no-store', signal: tmo(8000) });
       if (!r.ok) throw 0;
       const d = await r.json();
       const ke = d.keyEvents || [];
@@ -329,7 +330,7 @@
   }
 
   function pickAndRender(events) {
-    const evs = (events || []).filter(e => e.competitions && e.competitions[0]).filter(matchesTeam);
+    const evs = (events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type).filter(matchesTeam);
     if (rotateTimer) { clearInterval(rotateTimer); rotateTimer = null; }
 
     const live = evs.filter(e => e.competitions[0].status.type.state === 'in');
@@ -338,7 +339,7 @@
       liveList = live;
       render(live[rotateIdx]);
       if (live.length > 1 && !TEAM) {
-        rotateTimer = setInterval(() => { rotateIdx = (rotateIdx + 1) % live.length; render(live[rotateIdx]); }, ROTATE_MS);
+        rotateTimer = setInterval(() => { try { rotateIdx = (rotateIdx + 1) % live.length; render(live[rotateIdx]); } catch (e) {} }, ROTATE_MS);
       }
       return;
     }
@@ -353,7 +354,7 @@
 
   async function tick() {
     try {
-      const res = await fetch(ENDPOINT, { cache: 'no-store' });
+      const res = await fetch(ENDPOINT, { cache: 'no-store', signal: tmo(8000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       pickAndRender(data.events || []);

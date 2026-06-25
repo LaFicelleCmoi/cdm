@@ -7,6 +7,8 @@
 (function () {
   const EP = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
   const cache = {}; // eventId -> { ts, list }
+  // Timeout sûr pour fetch (évite les requêtes qui pendent indéfiniment quand ESPN rame)
+  const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } };
 
   function kindOf(t) {
     if (!t) return 'other';
@@ -56,7 +58,7 @@
     const c = cache[eventId];
     if (c && (Date.now() - c.ts) < maxAgeMs) return c.list;
     try {
-      const res = await fetch(EP + eventId, { cache: 'no-store' });
+      const res = await fetch(EP + eventId, { cache: 'no-store', signal: tmo(8000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       const list = normalize(data.keyEvents);

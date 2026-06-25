@@ -1164,6 +1164,12 @@ function updateKnockoutStage() {
     for(let i=1; i<=6; i++) {
       if(matchStatus[`${g}_${i}`] !== 'done') groupDone = false;
     }
+    // Sécurité : un groupe n'est "terminé" (pour la phase finale) que si son
+    // classement est réellement calculé. À l'init, groupData des groupes pas
+    // encore traités est vide → évite "reading 'name' of undefined" qui cassait
+    // le rendu de tous les groupes suivants.
+    const gd = groupData[g];
+    if (!gd || !gd[0] || !gd[1] || !gd[2]) groupDone = false;
 
     if(groupDone) {
       const first = groupData[g][0].name;
@@ -1823,6 +1829,7 @@ checkChampion();
     catch { return ''; }
   };
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } }; // timeout fetch sûr
 
   // Countdown to kickoff (Day.js duration with native fallback)
   function fmtCountdown(ms) {
@@ -2101,7 +2108,7 @@ checkChampion();
   }
 
   function update(data) {
-    const events = (data.events || []).filter(e => e.competitions && e.competitions[0]);
+    const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
     syncSimFromEspn(events); // mirror real live/finished scores into the simulator
     liveEvents = events.filter(e => e.competitions[0].status.type.state === 'in');
 
@@ -2112,8 +2119,10 @@ checkChampion();
       if (rotateTimer) clearInterval(rotateTimer);
       if (liveEvents.length > 1) {
         rotateTimer = setInterval(() => {
-          rotateIdx = (rotateIdx + 1) % liveEvents.length;
-          render(liveEvents[rotateIdx], liveEvents.length - 1);
+          try {
+            rotateIdx = (rotateIdx + 1) % liveEvents.length;
+            render(liveEvents[rotateIdx], liveEvents.length - 1);
+          } catch (e) {}
         }, 6000);
       }
       return;
@@ -2131,7 +2140,7 @@ checkChampion();
 
   async function fetchLive() {
     try {
-      const res = await fetch(ENDPOINT, { cache: 'no-store' });
+      const res = await fetch(ENDPOINT, { cache: 'no-store', signal: tmo(8000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       update(await res.json());
     } catch (err) {
@@ -2154,10 +2163,10 @@ checkChampion();
     if (btn) btn.classList.add('syncing');
     try {
       const url = `${ENDPOINT}?dates=${TOURNAMENT_START}-${TOURNAMENT_END}&limit=500`;
-      const res = await fetch(url, { cache: 'no-store' });
+      const res = await fetch(url, { cache: 'no-store', signal: tmo(12000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
-      const events = (data.events || []).filter(e => e.competitions && e.competitions[0]);
+      const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
       const before = countSimResults();
       syncSimFromEspn(events);
       const after = countSimResults();

@@ -654,15 +654,16 @@ function scoringSides(prevKey, curHome, curAway) {
    Doc: https://gist.github.com/akeaswaran/b48b02f1c94f873c6655e7129910fc3b
    =========================================================== */
 const ESPN_ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } }; // timeout fetch sûr
 
 /* ---------- Résultats du tournoi (toute la période) → parcours des équipes ---------- */
 let _allEvents = null;
 async function loadAllResults() {
   try {
-    const res = await fetch(`${ESPN_ENDPOINT}?dates=20260611-20260720&limit=500`, { cache: 'no-store' });
+    const res = await fetch(`${ESPN_ENDPOINT}?dates=20260611-20260720&limit=500`, { cache: 'no-store', signal: tmo(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
-    _allEvents = (data.events || []).filter(e => e.competitions && e.competitions[0]);
+    _allEvents = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
     // si une carte pays est ouverte, on rafraîchit son parcours (+ on re-dimensionne le canvas pixel)
     const open = document.querySelector('.pixel-card[data-country]');
     if (open) {
@@ -776,7 +777,7 @@ async function fetchLiveScores(manual = false) {
   const btn = document.getElementById('live-refresh-btn');
   if (btn) btn.classList.add('spinning');
   try {
-    const res = await fetch(ESPN_ENDPOINT, { cache: 'no-store' });
+    const res = await fetch(ESPN_ENDPOINT, { cache: 'no-store', signal: tmo(8000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     _lastLiveData = data;
@@ -803,7 +804,9 @@ function renderLiveScores(data, manual) {
   const section = document.getElementById('live-section');
   const grid = document.getElementById('live-cards-grid');
   const titleText = document.getElementById('live-section-title-text');
-  const events = (data.events || []).slice();
+  // Filtre défensif : on écarte tout event ESPN malformé (sans competitions/status.type)
+  // pour qu'un seul mauvais match ne fasse pas planter (et vider) toute la grille.
+  const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
 
   if (events.length === 0) {
     section.style.display = '';
