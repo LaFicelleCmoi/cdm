@@ -40,6 +40,10 @@
       opponents_label: 'Adversaires de poule', view_group: 'Voir le groupe',
       results_label: 'Parcours', res_w: 'V', res_d: 'N', res_l: 'D', no_results: 'Aucun match joué',
       scorers_label: 'Buteurs',
+      fav_label: 'Ta sélection', fav_group: 'Groupe', fav_next: 'Prochain :', fav_last: 'Dernier :',
+      fav_no_match: 'Pas de match à venir', fav_see: 'Voir ma sélection', fav_change: 'Changer', fav_set: 'Ta sélection :',
+      fav_pick_title: '⭐ Choisis ta sélection favorite', fav_pick_sub: 'Tu auras un suivi personnalisé : prochain match, résultats, mise en avant.',
+      fav_search_ph: 'Rechercher une équipe…', fav_skip: 'Plus tard',
       /* CDM nav / controls */
       nav_back: '← Retour au Dashboard',
       tab_groups: 'PHASE DE GROUPES', tab_planning: 'PLANNING POULES', tab_bracket: 'PHASE FINALE',
@@ -102,6 +106,10 @@
       opponents_label: 'Group opponents', view_group: 'View group',
       results_label: 'Results', res_w: 'W', res_d: 'D', res_l: 'L', no_results: 'No match played yet',
       scorers_label: 'Scorers',
+      fav_label: 'Your team', fav_group: 'Group', fav_next: 'Next:', fav_last: 'Last:',
+      fav_no_match: 'No upcoming match', fav_see: 'View my team', fav_change: 'Change', fav_set: 'Your team:',
+      fav_pick_title: '⭐ Pick your favorite team', fav_pick_sub: "You'll get personalised tracking: next match, results, highlights.",
+      fav_search_ph: 'Search a team…', fav_skip: 'Later',
       /* CDM nav / controls */
       nav_back: '← Back to Dashboard',
       tab_groups: 'GROUP STAGE', tab_planning: 'GROUP SCHEDULE', tab_bracket: 'KNOCKOUT',
