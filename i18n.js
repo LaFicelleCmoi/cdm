@@ -44,6 +44,7 @@
       fav_no_match: 'Pas de match à venir', fav_see: 'Voir ma sélection', fav_change: 'Changer', fav_set: 'Ta sélection :',
       fav_pick_title: '⭐ Choisis ta sélection favorite', fav_pick_sub: 'Tu auras un suivi personnalisé : prochain match, résultats, mise en avant.',
       fav_search_ph: 'Rechercher une équipe…', fav_skip: 'Plus tard',
+      phase_groups: 'Poules', phase_r32: '16es de finale', phase_r16: '8es de finale', phase_qf: 'Quart de finale', phase_sf: 'Demi-finale', phase_3p: 'Petite finale', phase_final: '🏆 Finale',
       /* CDM nav / controls */
       nav_back: '← Retour au Dashboard',
       tab_groups: 'PHASE DE GROUPES', tab_planning: 'PLANNING POULES', tab_bracket: 'PHASE FINALE',
@@ -110,6 +111,7 @@
       fav_no_match: 'No upcoming match', fav_see: 'View my team', fav_change: 'Change', fav_set: 'Your team:',
       fav_pick_title: '⭐ Pick your favorite team', fav_pick_sub: "You'll get personalised tracking: next match, results, highlights.",
       fav_search_ph: 'Search a team…', fav_skip: 'Later',
+      phase_groups: 'Group stage', phase_r32: 'Round of 32', phase_r16: 'Round of 16', phase_qf: 'Quarter-final', phase_sf: 'Semi-final', phase_3p: 'Third place', phase_final: '🏆 Final',
       /* CDM nav / controls */
       nav_back: '← Back to Dashboard',
       tab_groups: 'GROUP STAGE', tab_planning: 'GROUP SCHEDULE', tab_bracket: 'KNOCKOUT',
