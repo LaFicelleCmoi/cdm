@@ -1121,26 +1121,42 @@ function filterTeams(val) {
 }
 
 const koState = {};
+// Bracket OFFICIEL CDM 2026 (48 équipes). Sources concordantes : FIFA/Wikipédia + API ESPN.
+// Les commentaires // M73.. renvoient au n° de match officiel.
 const rounds = [
   { id:'r16', label:'16es de finale', matches:[
-    {id:'r16_01',t1:'1A',t2:'2C'},{id:'r16_02',t1:'1B',t2:'2D'},
-    {id:'r16_03',t1:'1C',t2:'2A'},{id:'r16_04',t1:'1D',t2:'2B'},
-    {id:'r16_05',t1:'1E',t2:'2G'},{id:'r16_06',t1:'1F',t2:'2H'},
-    {id:'r16_07',t1:'1G',t2:'2E'},{id:'r16_08',t1:'1H',t2:'2F'},
-    {id:'r16_09',t1:'1I',t2:'2K'},{id:'r16_10',t1:'1J',t2:'2L'},
-    {id:'r16_11',t1:'1K',t2:'2I'},{id:'r16_12',t1:'1L',t2:'2J'},
-    {id:'r16_13',t1:'M3 ①',t2:'M3 ②'},{id:'r16_14',t1:'M3 ③',t2:'M3 ④'},
-    {id:'r16_15',t1:'M3 ⑤',t2:'M3 ⑥'},{id:'r16_16',t1:'M3 ⑦',t2:'M3 ⑧'},
+    {id:'r16_01',t1:'2A',t2:'2B'},     // M73
+    {id:'r16_02',t1:'1E',t2:'M3 ①'},   // M74
+    {id:'r16_03',t1:'1F',t2:'2C'},     // M75
+    {id:'r16_04',t1:'1C',t2:'2F'},     // M76
+    {id:'r16_05',t1:'1I',t2:'M3 ②'},   // M77
+    {id:'r16_06',t1:'2E',t2:'2I'},     // M78
+    {id:'r16_07',t1:'1A',t2:'M3 ③'},   // M79
+    {id:'r16_08',t1:'1L',t2:'M3 ④'},   // M80
+    {id:'r16_09',t1:'1D',t2:'M3 ⑤'},   // M81
+    {id:'r16_10',t1:'1G',t2:'M3 ⑥'},   // M82
+    {id:'r16_11',t1:'2K',t2:'2L'},     // M83
+    {id:'r16_12',t1:'1H',t2:'2J'},     // M84
+    {id:'r16_13',t1:'1B',t2:'M3 ⑦'},   // M85
+    {id:'r16_14',t1:'1J',t2:'2H'},     // M86
+    {id:'r16_15',t1:'1K',t2:'M3 ⑧'},   // M87
+    {id:'r16_16',t1:'2D',t2:'2G'},     // M88
   ]},
   { id:'r8', label:'8es de finale', matches:[
-    {id:'r8_1',t1:'V R16 #1',t2:'V R16 #2'},{id:'r8_2',t1:'V R16 #3',t2:'V R16 #4'},
-    {id:'r8_3',t1:'V R16 #5',t2:'V R16 #6'},{id:'r8_4',t1:'V R16 #7',t2:'V R16 #8'},
-    {id:'r8_5',t1:'V R16 #9',t2:'V R16 #10'},{id:'r8_6',t1:'V R16 #11',t2:'V R16 #12'},
-    {id:'r8_7',t1:'V R16 #13',t2:'V R16 #14'},{id:'r8_8',t1:'V R16 #15',t2:'V R16 #16'},
+    {id:'r8_1',t1:'V R16 #2',t2:'V R16 #5'},    // M89 (V.M74 v V.M77)
+    {id:'r8_2',t1:'V R16 #1',t2:'V R16 #3'},    // M90 (V.M73 v V.M75)
+    {id:'r8_3',t1:'V R16 #4',t2:'V R16 #6'},    // M91 (V.M76 v V.M78)
+    {id:'r8_4',t1:'V R16 #7',t2:'V R16 #8'},    // M92 (V.M79 v V.M80)
+    {id:'r8_5',t1:'V R16 #11',t2:'V R16 #12'},  // M93 (V.M83 v V.M84)
+    {id:'r8_6',t1:'V R16 #9',t2:'V R16 #10'},   // M94 (V.M81 v V.M82)
+    {id:'r8_7',t1:'V R16 #14',t2:'V R16 #16'},  // M95 (V.M86 v V.M88)
+    {id:'r8_8',t1:'V R16 #13',t2:'V R16 #15'},  // M96 (V.M85 v V.M87)
   ]},
   { id:'qf', label:'Quarts de finale', matches:[
-    {id:'qf_1',t1:'V 8e #1',t2:'V 8e #2'},{id:'qf_2',t1:'V 8e #3',t2:'V 8e #4'},
-    {id:'qf_3',t1:'V 8e #5',t2:'V 8e #6'},{id:'qf_4',t1:'V 8e #7',t2:'V 8e #8'},
+    {id:'qf_1',t1:'V 8e #1',t2:'V 8e #2'},  // M97  (V.M89 v V.M90)
+    {id:'qf_2',t1:'V 8e #5',t2:'V 8e #6'},  // M98  (V.M93 v V.M94)
+    {id:'qf_3',t1:'V 8e #3',t2:'V 8e #4'},  // M99  (V.M91 v V.M92)
+    {id:'qf_4',t1:'V 8e #7',t2:'V 8e #8'},  // M100 (V.M95 v V.M96)
   ]},
   { id:'sf', label:'Demi-finales', matches:[
     {id:'sf_1',t1:'V QF #1',t2:'V QF #2'},{id:'sf_2',t1:'V QF #3',t2:'V QF #4'},
@@ -1390,9 +1406,18 @@ function buildViewerData() {
     mid++;
   };
 
+  // Ordre d'affichage de l'arbre = ordre de l'alimentation OFFICIELLE (sinon
+  // brackets-viewer relierait les mauvais matchs : le bracket CDM 2026 n'est
+  // pas un arbre "consécutif"). Cet ordre place côte à côte les matchs qui
+  // alimentent le même match du tour suivant.
+  const TREE_ORDER = {
+    r16: ['r16_02','r16_05','r16_01','r16_03','r16_11','r16_12','r16_09','r16_10','r16_04','r16_06','r16_07','r16_08','r16_14','r16_16','r16_13','r16_15'],
+    r8:  ['r8_1','r8_2','r8_5','r8_6','r8_3','r8_4','r8_7','r8_8'],
+    qf:  ['qf_1','qf_2','qf_3','qf_4'],
+    sf:  ['sf_1','sf_2'],
+  };
   ['r16', 'r8', 'qf', 'sf'].forEach((srcId, roundId) => {
-    const round = rounds.find(r => r.id === srcId);
-    round.matches.forEach((m, i) => pushMatch(m.id, roundId, i + 1));
+    TREE_ORDER[srcId].forEach((mid, i) => pushMatch(mid, roundId, i + 1));
   });
   pushMatch('fin', 4, 1); // final only — 3rd place rendered separately
 
