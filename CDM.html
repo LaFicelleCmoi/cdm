@@ -1940,9 +1940,11 @@ let _liveScorersAt = 0;      // horodatage du cache
 let _liveScorersBusy = false;
 let _liveScorersErr = false;
 let _lastTotals = {};        // nom -> dernier total affiché (animation "vient de marquer")
-// ESPN core API : classement des buteurs de l'édition en cours (on suit les $ref athlète)
-const SCORERS_LEADERS_URL = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/seasons/2026/types/1/leaders';
-const SCORERS_RESOLVE_LIMIT = 24;
+// Buteurs calculés EN TEMPS RÉEL en agrégeant les buts de tous les matchs (1 seule requête).
+// L'agrégat ESPN « goalsLeaders » est en retard d'une journée ET ignore les phases finales ;
+// le scoreboard daté expose chaque but (details[].athletesInvolved) → bien plus fiable.
+const SCORERS_FEED_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260720&limit=500';
+const LIVE_VISIBLE = 16;
 
 // Une ligne de buteur (réutilisée par les deux modes). opts.round = drapeau rond (ESPN), opts.badge = pastille 2026.
 function scorerRow(s, max, opts) {
@@ -2030,7 +2032,7 @@ function renderScorersBody() {
   if (sub) sub.textContent = window.t('scorers_live_sub');
   if (_liveScorers && _liveScorers.length) {
     const lang = localStorage.getItem('cdm2026_lang') || 'fr';
-    const top = _liveScorers.slice(0, 12);
+    const top = _liveScorers.slice(0, LIVE_VISIBLE);
     const max = top[0].goals;
     body.innerHTML = top.map(s => {
       const country = (lang === 'fr' && window.TEAM_FR && window.TEAM_FR[s.country]) ? window.TEAM_FR[s.country] : s.country;
@@ -2050,31 +2052,38 @@ function renderScorersBody() {
   }
 }
 
-// Récupère le classement des buteurs 2026 (ESPN), résout chaque athlète, construit la map 2026.
+// Calcule les buteurs 2026 EN TEMPS RÉEL en agrégeant les buts de TOUS les matchs (1 requête).
 async function fetchLiveScorers(force) {
   if (_liveScorersBusy) return;
-  if (!force && _liveScorers && _liveScorers.length && Date.now() - _liveScorersAt < 180000) return; // cache 3 min
+  if (!force && _liveScorers && Date.now() - _liveScorersAt < 120000) return; // cache 2 min
   _liveScorersBusy = true; _liveScorersErr = false;
   try {
-    const r = await fetch(SCORERS_LEADERS_URL, { cache: 'no-store', signal: scTmo(8000) });
+    const r = await fetch(SCORERS_FEED_URL, { cache: 'no-store', signal: scTmo(10000) });
     if (!r.ok) throw new Error('HTTP ' + r.status);
     const j = await r.json();
-    const cat = (j.categories || []).find(c => c.name === 'goalsLeaders');
-    const leaders = ((cat && cat.leaders) || []).filter(l => l && l.value > 0 && l.athlete && l.athlete.$ref).slice(0, SCORERS_RESOLVE_LIMIT);
-    const detailed = await Promise.all(leaders.map(async (l) => {
-      try {
-        const ar = await fetch(String(l.athlete.$ref).replace(/^http:/, 'https:'), { cache: 'no-store', signal: scTmo(8000) });
-        if (!ar.ok) return null;
-        const a = await ar.json();
-        return { name: a.displayName || a.fullName || '—', flag: (a.flag && a.flag.href) || '', country: (a.flag && a.flag.alt) || '', goals: l.value };
-      } catch (e) { return null; }
-    }));
-    const clean = detailed.filter(Boolean);
+    const events = (j.events || []).filter(e => e && e.competitions && e.competitions[0]);
+    const teamMap = {}, scorers = {};
+    events.forEach(ev => {
+      const comp = ev.competitions[0];
+      (comp.competitors || []).forEach(c => { if (c.team && c.team.id) teamMap[c.team.id] = { name: c.team.displayName, logo: c.team.logo }; });
+      (comp.details || []).forEach(d => {
+        // but valide = action marquante, hors csc et hors tirs au but (penaltys en jeu inclus)
+        if (!d || !d.scoringPlay || d.ownGoal || d.shootout) return;
+        const a = (d.athletesInvolved || [])[0];
+        if (!a || !a.id) return;
+        if (!scorers[a.id]) scorers[a.id] = { name: a.displayName || a.fullName || '—', goals: 0, teamId: (a.team && a.team.id) || (d.team && d.team.id) || '' };
+        scorers[a.id].goals++;
+      });
+    });
+    const list = Object.keys(scorers).map(id => {
+      const s = scorers[id], tm = teamMap[s.teamId] || {};
+      return { name: s.name, goals: s.goals, flag: tm.logo || '', country: tm.name || '' };
+    }).sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name));
     let rank = 0, prev = null; // rang dense avec ex æquo (5,4,4,4,3 → 1,2,2,2,5)
-    clean.forEach((s, i) => { if (s.goals !== prev) { rank = i + 1; prev = s.goals; } s.rank = rank; });
-    _liveScorers = clean;
+    list.forEach((s, i) => { if (s.goals !== prev) { rank = i + 1; prev = s.goals; } s.rank = rank; });
+    _liveScorers = list;
     _live2026 = {};
-    clean.forEach(s => { _live2026[normName(s.name)] = s.goals; });
+    list.forEach(s => { const k = normName(s.name); _live2026[k] = Math.max(_live2026[k] || 0, s.goals); });
     _liveScorersAt = Date.now();
   } catch (e) {
     console.warn('Live scorers fetch failed:', e);
