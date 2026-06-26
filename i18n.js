@@ -47,7 +47,9 @@
       phase_groups: 'Poules', phase_r32: '16es de finale', phase_r16: '8es de finale', phase_qf: 'Quart de finale', phase_sf: 'Demi-finale', phase_3p: 'Petite finale', phase_final: '🏆 Finale',
       /* CDM nav / controls */
       nav_back: '← Retour au Dashboard',
-      tab_groups: 'PHASE DE GROUPES', tab_planning: 'PLANNING POULES', tab_bracket: 'PHASE FINALE',
+      tab_groups: 'PHASE DE GROUPES', tab_planning: 'PLANNING POULES', tab_bracket: 'PHASE FINALE', tab_scorers: 'MEILLEURS BUTEURS',
+      scorers_title: "Meilleurs buteurs de l'histoire", scorers_sub: 'Coupe du Monde · classement de tous les temps', scorers_goals: 'buts',
+      scorers_note: "Palmarès officiel FIFA (hommes), tous Mondiaux confondus. L'édition 2026 en cours peut faire évoluer ce classement.",
       search_ph: 'Rechercher une équipe…',
       btn_fetch: '📡 Récupérer les scores', btn_reset: '🗑️ Réinitialiser la simulation',
       group_word: 'GROUPE', group_sub_locked: '🔒 Scores live (API)', poule: 'Poule',
@@ -114,7 +116,9 @@
       phase_groups: 'Group stage', phase_r32: 'Round of 32', phase_r16: 'Round of 16', phase_qf: 'Quarter-final', phase_sf: 'Semi-final', phase_3p: 'Third place', phase_final: '🏆 Final',
       /* CDM nav / controls */
       nav_back: '← Back to Dashboard',
-      tab_groups: 'GROUP STAGE', tab_planning: 'GROUP SCHEDULE', tab_bracket: 'KNOCKOUT',
+      tab_groups: 'GROUP STAGE', tab_planning: 'GROUP SCHEDULE', tab_bracket: 'KNOCKOUT', tab_scorers: 'TOP SCORERS',
+      scorers_title: 'All-time top scorers', scorers_sub: 'World Cup · all-time ranking', scorers_goals: 'goals',
+      scorers_note: 'Official FIFA record (men), across all World Cups. The ongoing 2026 edition may change this ranking.',
       search_ph: 'Search a team…',
       btn_fetch: '📡 Fetch scores', btn_reset: '🗑️ Reset simulation',
       group_word: 'GROUP', group_sub_locked: '🔒 Live scores (API)', poule: 'Group',

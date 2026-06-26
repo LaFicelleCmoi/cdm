@@ -19,7 +19,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=9"></script>
+<script src="i18n.js?v=10"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -478,6 +478,29 @@ body::before {
   .filter-input { font-size: 16px; }
   .p-score-val { font-size: 1em; padding: 2px 6px; }
 }
+
+/* ===== Meilleurs buteurs all-time ===== */
+.scorers-wrap { max-width: 760px; margin: 0 auto; }
+.scorers-head { text-align: center; margin-bottom: 22px; }
+.scorers-title { font-family: var(--font-d); font-size: clamp(1.8em, 4vw, 2.6em); letter-spacing: 0.04em; color: #fff; }
+.scorers-sub { color: var(--muted); font-size: 0.9em; margin-top: 4px; }
+.scorers-list { display: flex; flex-direction: column; gap: 8px; }
+.scorer-row { display: flex; align-items: center; gap: 14px; padding: 10px 16px; background: rgba(15, 25, 35, 0.8); border: 1px solid var(--border); border-radius: 14px; transition: transform 0.15s, border-color 0.15s; }
+.scorer-row:hover { transform: translateX(3px); border-color: rgba(251,197,49,0.35); }
+.scorer-row.top { border-color: rgba(251,197,49,0.4); background: linear-gradient(120deg, rgba(251,197,49,0.10), rgba(15,25,35,0.85)); }
+.scorer-row.r1 { box-shadow: 0 0 26px rgba(251,197,49,0.18); }
+.scorer-rank { width: 34px; flex-shrink: 0; text-align: center; font-family: var(--font-d); font-size: 1.4em; color: var(--muted); }
+.scorer-row.top .scorer-rank { font-size: 1.6em; }
+.scorer-flag { width: 40px; height: 27px; object-fit: cover; border-radius: 4px; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,0.5); }
+.scorer-id { flex: 1; min-width: 0; }
+.scorer-name { display: block; font-weight: 800; font-size: 1.05em; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.scorer-country { display: block; font-size: 0.72em; color: var(--muted); margin-top: 1px; }
+.scorer-bar { flex: 1.2; height: 8px; border-radius: 99px; background: rgba(255,255,255,0.07); overflow: hidden; }
+.scorer-bar span { display: block; height: 100%; border-radius: 99px; background: linear-gradient(90deg, var(--gold), #ffe08a); }
+.scorer-goals { flex-shrink: 0; min-width: 56px; text-align: right; font-family: var(--font-d); font-size: 1.8em; line-height: 1; color: var(--gold); }
+.scorer-goals small { font-family: var(--font-b); font-size: 0.3em; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.08em; margin-left: 3px; }
+.scorers-note { margin-top: 18px; text-align: center; font-size: 0.78em; color: var(--muted); line-height: 1.5; }
+@media (max-width: 560px) { .scorer-bar { display: none; } .scorer-name { white-space: normal; } }
 </style>
 </head>
 <body>
@@ -526,6 +549,9 @@ body::before {
   <button class="nav-tab" onclick="showSection('bracket',this)">
     <span class="nav-tab-icon">⚔</span> <span data-i18n="tab_bracket">PHASE FINALE</span>
   </button>
+  <button class="nav-tab" onclick="showSection('scorers',this)">
+    <span class="nav-tab-icon">🥇</span> <span data-i18n="tab_scorers">MEILLEURS BUTEURS</span>
+  </button>
 </div>
 
 <div class="section visible" id="sec-groups">
@@ -544,6 +570,10 @@ body::before {
 <div class="section" id="sec-planning-poules">
   <div class="planning-poule-wrap">
   </div>
+</div>
+
+<div class="section" id="sec-scorers">
+  <div class="scorers-wrap" id="scorers-wrap"></div>
 </div>
 
 <div class="section" id="sec-bracket">
@@ -1847,6 +1877,47 @@ checkChampion();
   setTimeout(go, 250);
   setTimeout(go, 1400);
 })();
+
+/* ===========================================================
+   MEILLEURS BUTEURS — palmarès all-time Coupe du Monde (hommes).
+   Donnée historique (FIFA) : ESPN n'expose pas les records all-time.
+   =========================================================== */
+const ALLTIME_SCORERS = [
+  { rank:1, name:'Miroslav Klose',    iso:'de',     country:'Allemagne', goals:16, wc:'2002 → 2014' },
+  { rank:2, name:'Ronaldo',           iso:'br',     country:'Brésil',    goals:15, wc:'1998 → 2006' },
+  { rank:3, name:'Gerd Müller',       iso:'de',     country:'RFA',       goals:14, wc:'1970, 1974' },
+  { rank:4, name:'Just Fontaine',     iso:'fr',     country:'France',    goals:13, wc:'1958' },
+  { rank:4, name:'Lionel Messi',      iso:'ar',     country:'Argentine', goals:13, wc:'2006 → 2022' },
+  { rank:6, name:'Pelé',              iso:'br',     country:'Brésil',    goals:12, wc:'1958 → 1970' },
+  { rank:6, name:'Kylian Mbappé',     iso:'fr',     country:'France',    goals:12, wc:'2018, 2022' },
+  { rank:8, name:'Sándor Kocsis',     iso:'hu',     country:'Hongrie',   goals:11, wc:'1954' },
+  { rank:8, name:'Jürgen Klinsmann',  iso:'de',     country:'Allemagne', goals:11, wc:'1990 → 1998' },
+  { rank:10, name:'Gabriel Batistuta', iso:'ar',    country:'Argentine', goals:10, wc:'1994 → 2002' },
+];
+function renderScorers() {
+  const host = document.getElementById('scorers-wrap');
+  if (!host) return;
+  const medal = (r) => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : r;
+  const max = ALLTIME_SCORERS[0].goals;
+  const rows = ALLTIME_SCORERS.map(s => `
+    <div class="scorer-row${s.rank <= 3 ? ' top r' + s.rank : ''}">
+      <div class="scorer-rank">${medal(s.rank)}</div>
+      <img class="scorer-flag" src="https://flagcdn.com/w80/${s.iso}.png" srcset="https://flagcdn.com/w160/${s.iso}.png 2x" alt="${esc2(s.country)}" title="${esc2(s.country)}" onerror="this.style.visibility='hidden'">
+      <div class="scorer-id"><span class="scorer-name">${esc2(s.name)}</span><span class="scorer-country">${esc2(s.country)} · ${esc2(s.wc)}</span></div>
+      <div class="scorer-bar"><span style="width:${Math.round(s.goals / max * 100)}%"></span></div>
+      <div class="scorer-goals">${s.goals}<small>${window.t('scorers_goals')}</small></div>
+    </div>`).join('');
+  host.innerHTML = `
+    <div class="scorers-head">
+      <div class="scorers-title">🥇 ${window.t('scorers_title')}</div>
+      <div class="scorers-sub">${window.t('scorers_sub')}</div>
+    </div>
+    <div class="scorers-list">${rows}</div>
+    <div class="scorers-note">${window.t('scorers_note')}</div>`;
+}
+const esc2 = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+renderScorers();
+document.addEventListener('langchange', renderScorers);
 
 /* ===========================================================
    LIVE SCORE WIDGET (top-right) — ESPN public API, no auth.
