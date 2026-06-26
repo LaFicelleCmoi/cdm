@@ -1932,6 +1932,9 @@ document.addEventListener('langchange', renderScorers);
   let liveEvents = [];
   let rotateIdx = 0;
   let rotateTimer = null;
+  let _hasLive = false;     // un match est-il en direct ? (pour le polling adaptatif)
+  let _pollTimer = null;    // timer de rafraîchissement auto-replanifié
+  let _busy = false;        // garde anti-chevauchement des fetch
   const lastScore = {}; // id -> "s1-s2" to bump on change
 
   const stateKey = (s) => s === 'in' ? 'in' : s === 'post' ? 'post' : 'pre';
@@ -2224,6 +2227,7 @@ document.addEventListener('langchange', renderScorers);
     syncSimFromEspn(events); // mirror real live/finished scores into the simulator
     const stateOf = e => e.competitions[0].status.type.state;
     const live = events.filter(e => stateOf(e) === 'in');
+    _hasLive = live.length > 0; // pilote la cadence de rafraîchissement
     const upcoming = events.filter(e => stateOf(e) === 'pre').sort((a, b) => new Date(a.date) - new Date(b.date));
     // Rotation : matchs EN DIRECT d'abord, puis les matchs À VENIR du jour (pas les terminés)
     const rota = live.concat(upcoming);
@@ -2244,6 +2248,8 @@ document.addEventListener('langchange', renderScorers);
   }
 
   async function fetchLive() {
+    if (_busy) return; // évite d'empiler les requêtes si l'une est encore en cours
+    _busy = true;
     try {
       const res = await fetch(ENDPOINT, { cache: 'no-store', signal: tmo(8000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -2251,7 +2257,7 @@ document.addEventListener('langchange', renderScorers);
     } catch (err) {
       console.warn('Live widget fetch failed:', err);
       if (!el.querySelector('.lw-row')) el.className = 'live-widget'; // keep last good render, else stay hidden
-    }
+    } finally { _busy = false; }
   }
 
   /* ---------- RATTRAPAGE : récupère TOUT l'historique du tournoi ----------
@@ -2298,12 +2304,20 @@ document.addEventListener('langchange', renderScorers);
   // Exposé global pour le bouton « 📡 Récupérer les scores »
   window.recoverScores = catchUp;
 
-  fetchLive();
+  // Rafraîchissement ADAPTATIF (auto-replanifié) : ~12 s pendant un match en
+  // direct (réactif aux buts), ~30 s sinon. Pause si l'onglet n'est pas visible.
+  function scheduleNextPoll() {
+    if (_pollTimer) clearTimeout(_pollTimer);
+    _pollTimer = setTimeout(async () => {
+      if (document.visibilityState === 'visible') await fetchLive();
+      scheduleNextPoll();
+    }, _hasLive ? 12000 : 30000);
+  }
+  fetchLive().then(scheduleNextPoll); // 1er fetch, puis cadence selon présence de live
   catchUp(); // rattrapage complet à l'ouverture
-  setInterval(() => { if (document.visibilityState === 'visible') fetchLive(); }, 30000);
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
-    fetchLive();
+    fetchLive().then(scheduleNextPoll); // refresh immédiat + réajuste la cadence
     // au retour sur l'onglet (PC qui sort de veille…), re-rattrape si > 5 min
     if (Date.now() - _lastCatchUp > 300000) catchUp();
   });
