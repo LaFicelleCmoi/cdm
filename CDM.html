@@ -1125,22 +1125,22 @@ const koState = {};
 // Les commentaires // M73.. renvoient au n° de match officiel.
 const rounds = [
   { id:'r16', label:'16es de finale', matches:[
-    {id:'r16_01',t1:'2A',t2:'2B'},     // M73
-    {id:'r16_02',t1:'1E',t2:'M3 ①'},   // M74
-    {id:'r16_03',t1:'1F',t2:'2C'},     // M75
-    {id:'r16_04',t1:'1C',t2:'2F'},     // M76
-    {id:'r16_05',t1:'1I',t2:'M3 ②'},   // M77
-    {id:'r16_06',t1:'2E',t2:'2I'},     // M78
-    {id:'r16_07',t1:'1A',t2:'M3 ③'},   // M79
-    {id:'r16_08',t1:'1L',t2:'M3 ④'},   // M80
-    {id:'r16_09',t1:'1D',t2:'M3 ⑤'},   // M81
-    {id:'r16_10',t1:'1G',t2:'M3 ⑥'},   // M82
-    {id:'r16_11',t1:'2K',t2:'2L'},     // M83
-    {id:'r16_12',t1:'1H',t2:'2J'},     // M84
-    {id:'r16_13',t1:'1B',t2:'M3 ⑦'},   // M85
-    {id:'r16_14',t1:'1J',t2:'2H'},     // M86
-    {id:'r16_15',t1:'1K',t2:'M3 ⑧'},   // M87
-    {id:'r16_16',t1:'2D',t2:'2G'},     // M88
+    {id:'r16_01',t1:'2A',t2:'2B'},               // M73
+    {id:'r16_02',t1:'1E',t2:'3e A/B/C/D/F'},     // M74
+    {id:'r16_03',t1:'1F',t2:'2C'},               // M75
+    {id:'r16_04',t1:'1C',t2:'2F'},               // M76
+    {id:'r16_05',t1:'1I',t2:'3e C/D/F/G/H'},     // M77
+    {id:'r16_06',t1:'2E',t2:'2I'},               // M78
+    {id:'r16_07',t1:'1A',t2:'3e C/E/F/H/I'},     // M79
+    {id:'r16_08',t1:'1L',t2:'3e E/H/I/J/K'},     // M80
+    {id:'r16_09',t1:'1D',t2:'3e B/E/F/I/J'},     // M81
+    {id:'r16_10',t1:'1G',t2:'3e A/E/H/I/J'},     // M82
+    {id:'r16_11',t1:'2K',t2:'2L'},               // M83
+    {id:'r16_12',t1:'1H',t2:'2J'},               // M84
+    {id:'r16_13',t1:'1B',t2:'3e E/F/G/I/J'},     // M85
+    {id:'r16_14',t1:'1J',t2:'2H'},               // M86
+    {id:'r16_15',t1:'1K',t2:'3e D/E/I/J/L'},     // M87
+    {id:'r16_16',t1:'2D',t2:'2G'},               // M88
   ]},
   { id:'r8', label:'8es de finale', matches:[
     {id:'r8_1',t1:'V R16 #2',t2:'V R16 #5'},    // M89 (V.M74 v V.M77)
@@ -1162,14 +1162,26 @@ const rounds = [
     {id:'sf_1',t1:'V QF #1',t2:'V QF #2'},{id:'sf_2',t1:'V QF #3',t2:'V QF #4'},
   ]},
   { id:'final', label:'Finale', matches:[
-    {id:'tp', t1:'P Demi #1',t2:'P Demi #2',cls:'is-3p',  headerCls:'purple-head',label:'🥉 3e place'},
-    {id:'fin',t1:'V Demi #1',t2:'V Demi #2',cls:'is-final',headerCls:'gold-head', label:'🏆 Finale · 19 juil.'},
+    {id:'tp', t1:'P Demi #1',t2:'P Demi #2',cls:'is-3p',  headerCls:'purple-head',label:'🥉 3e place · 18/07'},
+    {id:'fin',t1:'V Demi #1',t2:'V Demi #2',cls:'is-final',headerCls:'gold-head', label:'🏆 Finale · 19/07'},
   ]},
 ];
 
 rounds.forEach(r => r.matches.forEach(m => {
   koState[m.id] = { t1:m.t1, orig_t1:m.t1, t2:m.t2, orig_t2:m.t2, s1:'', s2:'', status:'pending', winner:'', so1:'', so2:'', synced:false };
 }));
+
+// Dates officielles (heure de Paris) — source ESPN, alignee sur le calendrier FIFA
+const KO_DATES = {
+  r16_01:'28/06 · 21h00', r16_02:'29/06 · 22h30', r16_03:'30/06 · 03h00', r16_04:'29/06 · 19h00',
+  r16_05:'30/06 · 23h00', r16_06:'30/06 · 19h00', r16_07:'01/07 · 03h00', r16_08:'01/07 · 18h00',
+  r16_09:'02/07 · 02h00', r16_10:'01/07 · 22h00', r16_11:'03/07 · 01h00', r16_12:'02/07 · 21h00',
+  r16_13:'03/07 · 05h00', r16_14:'04/07 · 00h00', r16_15:'04/07 · 03h30', r16_16:'03/07 · 20h00',
+  r8_1:'04/07 · 23h00', r8_2:'04/07 · 19h00', r8_3:'05/07 · 22h00', r8_4:'06/07 · 02h00',
+  r8_5:'06/07 · 21h00', r8_6:'07/07 · 02h00', r8_7:'07/07 · 18h00', r8_8:'07/07 · 22h00',
+  qf_1:'09/07 · 22h00', qf_2:'10/07 · 21h00', qf_3:'11/07 · 23h00', qf_4:'12/07 · 03h00',
+  sf_1:'14/07 · 21h00', sf_2:'15/07 · 21h00',
+};
 
 function updateKnockoutStage() {
   let thirdPlaces = [];
@@ -1213,7 +1225,7 @@ function updateKnockoutStage() {
   if(allGroupsDone) {
     thirdPlaces.sort((a,b) => b.pts!==a.pts ? b.pts-a.pts : b.gd!==a.gd ? b.gd-a.gd : b.gf-a.gf);
     const best8 = thirdPlaces.slice(0, 8);
-    const thirdPlaceTags = ['M3 ①', 'M3 ②', 'M3 ③', 'M3 ④', 'M3 ⑤', 'M3 ⑥', 'M3 ⑦', 'M3 ⑧'];
+    const thirdPlaceTags = ['3e A/B/C/D/F', '3e C/D/F/G/H', '3e C/E/F/H/I', '3e E/H/I/J/K', '3e B/E/F/I/J', '3e A/E/H/I/J', '3e E/F/G/I/J', '3e D/E/I/J/L'];
     
     Object.keys(koState).forEach(k => {
       thirdPlaceTags.forEach((tag, idx) => {
@@ -1222,7 +1234,7 @@ function updateKnockoutStage() {
       });
     });
   } else {
-    const thirdPlaceTags = ['M3 ①', 'M3 ②', 'M3 ③', 'M3 ④', 'M3 ⑤', 'M3 ⑥', 'M3 ⑦', 'M3 ⑧'];
+    const thirdPlaceTags = ['3e A/B/C/D/F', '3e C/D/F/G/H', '3e C/E/F/H/I', '3e E/H/I/J/K', '3e B/E/F/I/J', '3e A/E/H/I/J', '3e E/F/G/I/J', '3e D/E/I/J/L'];
     Object.keys(koState).forEach(k => {
       thirdPlaceTags.forEach((tag) => {
         if(koState[k].orig_t1 === tag) koState[k].t1 = tag;
@@ -1317,7 +1329,7 @@ function buildKoCard(m) {
 
   card.innerHTML = `
     <div class="ko-card-header">
-      <span>${m.label||m.id.replace('_',' #').toUpperCase()}</span>
+      <span>${m.label || KO_DATES[m.id] || m.id.replace('_',' #').toUpperCase()}</span>
       <span class="ko-card-status-dot ${dotCls}" title="${st.status}"></span>
     </div>
     <div class="ko-card-team">
@@ -1661,8 +1673,12 @@ function loadData() {
       }
     }
     if(data.koState) {
+      // On ne restaure QUE les scores/états : la STRUCTURE (t1/t2/orig_t1/orig_t2)
+      // vient toujours de la définition `rounds` à jour, sinon un ancien bracket
+      // sauvegardé écraserait les corrections d'appariements/dates.
       for(const k in data.koState) {
-         if(koState[k]) Object.assign(koState[k], data.koState[k]);
+        const sv = data.koState[k];
+        if(koState[k] && sv) ['s1','s2','status','winner','so1','so2','synced'].forEach(f => { if(f in sv) koState[k][f] = sv[f]; });
       }
     }
   }
