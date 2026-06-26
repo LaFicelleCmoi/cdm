@@ -19,7 +19,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=11"></script>
+<script src="i18n.js?v=12"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -505,6 +505,14 @@ body::before {
 .scorer-row.active.top { border-color: rgba(251,197,49,0.45); }
 .scorer-live { display: inline-block; vertical-align: middle; margin-left: 7px; padding: 1px 7px; border-radius: 999px; font-family: var(--font-b); font-size: 0.6em; font-weight: 800; letter-spacing: 0.05em; color: #04220f; background: linear-gradient(180deg, #3ee07a, #16a34a); box-shadow: 0 0 0 1px rgba(34,197,94,0.45); animation: scorerLive 1.8s ease-in-out infinite; }
 @keyframes scorerLive { 0%,100% { box-shadow: 0 0 0 1px rgba(34,197,94,0.45); } 50% { box-shadow: 0 0 0 4px rgba(34,197,94,0.10); } }
+.scorers-toggle { display: inline-flex; gap: 4px; margin-top: 14px; padding: 4px; background: rgba(15,25,35,0.85); border: 1px solid var(--border); border-radius: 999px; }
+.sc-tg { border: none; background: transparent; color: var(--muted); font-family: var(--font-b); font-weight: 800; font-size: 0.78em; letter-spacing: 0.04em; text-transform: uppercase; padding: 7px 16px; border-radius: 999px; cursor: pointer; transition: color 0.18s, background 0.18s, box-shadow 0.18s; }
+.sc-tg:hover { color: #fff; }
+.sc-tg.on { background: linear-gradient(180deg, var(--gold), #e0a91a); color: #1a1205; box-shadow: 0 2px 12px rgba(251,197,49,0.32); }
+.scorer-flag.round { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; background: rgba(255,255,255,0.05); }
+.scorers-loading { text-align: center; color: var(--muted); padding: 38px 0; font-size: 0.92em; }
+.sc-spin { display: inline-block; animation: scSpin 1.1s linear infinite; }
+@keyframes scSpin { to { transform: rotate(360deg); } }
 @media (max-width: 560px) { .scorer-bar { display: none; } .scorer-name { white-space: normal; } }
 </style>
 </head>
@@ -1907,29 +1915,131 @@ const ALLTIME_SCORERS = [
   { rank:10, name:'Teófilo Cubillas',  iso:'pe',     country:'Pérou',      goals:10, wc:'1970 → 1982' },
   { rank:10, name:'Thomas Müller',     iso:'de',     country:'Allemagne',  goals:10, wc:'2010 → 2022' },
 ];
+const esc2 = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+const scMedal = (r) => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : r;
+const scTmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } };
+
+/* --- Toggle buteurs : "Tous les temps" ↔ "Mondial 2026 en direct" (Soulier d'or) --- */
+let scorersMode = 'alltime';
+let _liveScorers = null;     // cache des buteurs 2026 (résolus)
+let _liveScorersAt = 0;      // horodatage du cache
+let _liveScorersBusy = false;
+let _liveScorersErr = false;
+// ESPN core API : classement des buteurs de l'édition en cours (suit des $ref athlète)
+const SCORERS_LEADERS_URL = 'https://sports.core.api.espn.com/v2/sports/soccer/leagues/fifa.world/seasons/2026/types/1/leaders';
+
+// Une ligne de buteur (réutilisée par les deux modes). opts.round = drapeau rond (ESPN), opts.badge = pastille 2026.
+function scorerRow(s, max, opts) {
+  opts = opts || {};
+  const cls = `scorer-row${s.rank <= 3 ? ' top r' + s.rank : ''}${s.active ? ' active' : ''}`;
+  const flag = opts.round
+    ? `<img class="scorer-flag round" src="${esc2(s.flag)}" alt="${esc2(s.country)}" title="${esc2(s.country)}" onerror="this.style.visibility='hidden'">`
+    : `<img class="scorer-flag" src="https://flagcdn.com/w80/${s.iso}.png" srcset="https://flagcdn.com/w160/${s.iso}.png 2x" alt="${esc2(s.country)}" title="${esc2(s.country)}" onerror="this.style.visibility='hidden'">`;
+  const badge = (s.active && opts.badge) ? ` <span class="scorer-live" title="${esc2(window.t('scorers_active'))}">2026</span>` : '';
+  return `
+    <div class="${cls}">
+      <div class="scorer-rank">${scMedal(s.rank)}</div>
+      ${flag}
+      <div class="scorer-id"><span class="scorer-name">${esc2(s.name)}${badge}</span><span class="scorer-country">${esc2(s.sub)}</span></div>
+      <div class="scorer-bar"><span style="width:${max ? Math.round(s.goals / max * 100) : 0}%"></span></div>
+      <div class="scorer-goals">${s.goals}<small>${window.t('scorers_goals')}</small></div>
+    </div>`;
+}
+
 function renderScorers() {
   const host = document.getElementById('scorers-wrap');
   if (!host) return;
-  const medal = (r) => r === 1 ? '🥇' : r === 2 ? '🥈' : r === 3 ? '🥉' : r;
-  const max = ALLTIME_SCORERS[0].goals;
-  const rows = ALLTIME_SCORERS.map(s => `
-    <div class="scorer-row${s.rank <= 3 ? ' top r' + s.rank : ''}${s.active ? ' active' : ''}">
-      <div class="scorer-rank">${medal(s.rank)}</div>
-      <img class="scorer-flag" src="https://flagcdn.com/w80/${s.iso}.png" srcset="https://flagcdn.com/w160/${s.iso}.png 2x" alt="${esc2(s.country)}" title="${esc2(s.country)}" onerror="this.style.visibility='hidden'">
-      <div class="scorer-id"><span class="scorer-name">${esc2(s.name)}${s.active ? ` <span class="scorer-live" title="${esc2(window.t('scorers_active'))}">2026</span>` : ''}</span><span class="scorer-country">${esc2(s.country)} · ${esc2(s.wc)}</span></div>
-      <div class="scorer-bar"><span style="width:${Math.round(s.goals / max * 100)}%"></span></div>
-      <div class="scorer-goals">${s.goals}<small>${window.t('scorers_goals')}</small></div>
-    </div>`).join('');
   host.innerHTML = `
     <div class="scorers-head">
       <div class="scorers-title">🥇 ${window.t('scorers_title')}</div>
-      <div class="scorers-sub">${window.t('scorers_sub')}</div>
-      <div class="scorers-asof">${window.t('scorers_asof')}</div>
+      <div class="scorers-toggle">
+        <button class="sc-tg${scorersMode === 'alltime' ? ' on' : ''}" data-mode="alltime">${window.t('scorers_tab_alltime')}</button>
+        <button class="sc-tg${scorersMode === 'live' ? ' on' : ''}" data-mode="live">${window.t('scorers_tab_live')}</button>
+      </div>
+      <div class="scorers-sub" id="scorers-sub"></div>
     </div>
-    <div class="scorers-list">${rows}</div>
-    <div class="scorers-note">${window.t('scorers_note')}</div>`;
+    <div class="scorers-list" id="scorers-body"></div>
+    <div class="scorers-note" id="scorers-note"></div>`;
+  host.querySelectorAll('.sc-tg').forEach(b => b.addEventListener('click', () => {
+    if (b.dataset.mode === scorersMode) return;
+    scorersMode = b.dataset.mode;
+    renderScorers();
+  }));
+  renderScorersBody();
 }
-const esc2 = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+
+function renderScorersBody() {
+  const body = document.getElementById('scorers-body');
+  const sub = document.getElementById('scorers-sub');
+  const note = document.getElementById('scorers-note');
+  if (!body) return;
+
+  if (scorersMode === 'alltime') {
+    if (sub) sub.textContent = window.t('scorers_sub');
+    const max = ALLTIME_SCORERS[0].goals;
+    body.innerHTML = ALLTIME_SCORERS.map(s => scorerRow(
+      { rank: s.rank, name: s.name, iso: s.iso, country: s.country, goals: s.goals, active: s.active, sub: `${s.country} · ${s.wc}` },
+      max, { badge: true }
+    )).join('');
+    if (note) note.innerHTML = `<div class="scorers-asof">${esc2(window.t('scorers_asof'))}</div>${window.t('scorers_note')}`;
+    return;
+  }
+
+  // --- Mode "Mondial 2026 en direct" ---
+  if (sub) sub.textContent = window.t('scorers_live_sub');
+  if (_liveScorers && _liveScorers.length) {
+    const lang = localStorage.getItem('cdm2026_lang') || 'fr';
+    const max = _liveScorers[0].goals;
+    body.innerHTML = _liveScorers.map(s => {
+      const country = (lang === 'fr' && window.TEAM_FR && window.TEAM_FR[s.country]) ? window.TEAM_FR[s.country] : s.country;
+      return scorerRow({ rank: s.rank, name: s.name, flag: s.flag, country: country, goals: s.goals, sub: country }, max, { round: true });
+    }).join('');
+    if (note) note.textContent = window.t('scorers_live_note');
+  } else if (_liveScorersErr) {
+    body.innerHTML = `<div class="scorers-loading">⚠️ ${esc2(window.t('scorers_live_fail'))}</div>`;
+    if (note) note.textContent = '';
+  } else if (_liveScorers && !_liveScorers.length) {
+    body.innerHTML = `<div class="scorers-loading">${esc2(window.t('scorers_live_empty'))}</div>`;
+    if (note) note.textContent = '';
+  } else {
+    body.innerHTML = `<div class="scorers-loading"><span class="sc-spin">⚽</span> ${esc2(window.t('scorers_loading'))}</div>`;
+    if (note) note.textContent = '';
+    fetchLiveScorers();
+  }
+}
+
+// Récupère le classement des buteurs 2026 sur ESPN, puis résout chaque athlète ($ref → nom + drapeau).
+async function fetchLiveScorers() {
+  if (_liveScorersBusy) return;
+  if (_liveScorers && _liveScorers.length && Date.now() - _liveScorersAt < 180000) return; // cache 3 min
+  _liveScorersBusy = true; _liveScorersErr = false;
+  try {
+    const r = await fetch(SCORERS_LEADERS_URL, { cache: 'no-store', signal: scTmo(8000) });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const cat = (j.categories || []).find(c => c.name === 'goalsLeaders');
+    const leaders = ((cat && cat.leaders) || []).filter(l => l && l.value > 0 && l.athlete && l.athlete.$ref).slice(0, 12);
+    const detailed = await Promise.all(leaders.map(async (l) => {
+      try {
+        const ar = await fetch(String(l.athlete.$ref).replace(/^http:/, 'https:'), { cache: 'no-store', signal: scTmo(8000) });
+        if (!ar.ok) return null;
+        const a = await ar.json();
+        return { name: a.displayName || a.fullName || '—', flag: (a.flag && a.flag.href) || '', country: (a.flag && a.flag.alt) || '', goals: l.value };
+      } catch (e) { return null; }
+    }));
+    const clean = detailed.filter(Boolean);
+    let rank = 0, prev = null; // rang dense avec ex æquo (5,4,4,4,3 → 1,2,2,2,5)
+    clean.forEach((s, i) => { if (s.goals !== prev) { rank = i + 1; prev = s.goals; } s.rank = rank; });
+    _liveScorers = clean; _liveScorersAt = Date.now();
+  } catch (e) {
+    console.warn('Live scorers fetch failed:', e);
+    _liveScorersErr = true;
+  } finally {
+    _liveScorersBusy = false;
+    if (scorersMode === 'live') renderScorersBody();
+  }
+}
+
 renderScorers();
 document.addEventListener('langchange', renderScorers);
 
@@ -2145,6 +2255,7 @@ document.addEventListener('langchange', renderScorers);
     'England':'Angleterre','Croatia':'Croatie','Ghana':'Ghana','Panama':'Panama'
   };
   const frName = (en) => teamNameEnFr[en] || en;
+  window.TEAM_FR = teamNameEnFr; // exposé pour l'onglet buteurs (noms FR des pays ESPN)
 
   function findGroupMatch(frA, frB) {
     for (const g of groupKeys) {
