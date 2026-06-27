@@ -19,7 +19,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=13"></script>
+<script src="i18n.js?v=14"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -518,6 +518,35 @@ body::before {
 .sc-livetag { color: #ff5252; font-weight: 800; font-size: 0.92em; letter-spacing: 0.03em; animation: scBlink 1.5s ease-in-out infinite; }
 @keyframes scBlink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
 @media (max-width: 560px) { .scorer-bar { display: none; } .scorer-name { white-space: normal; } }
+
+/* === Célébration de but « BUT ! » === */
+#goal-cele-layer { position: fixed; inset: 0; z-index: 9500; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
+.gc-card {
+  --tc: #fbc531;
+  margin-top: 15vh; min-width: 270px; max-width: 92vw; padding: 20px 34px 22px;
+  border-radius: 22px; text-align: center;
+  background: linear-gradient(180deg, rgba(14,20,28,0.97), rgba(8,12,18,0.99));
+  border: 2px solid var(--tc);
+  box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 50px -8px var(--tc), inset 0 0 46px -24px var(--tc);
+  opacity: 0; transform: translateY(-26px) scale(0.82);
+}
+.gc-card.in { animation: gcIn 0.55s cubic-bezier(.18,.9,.28,1.3) forwards; }
+.gc-card.out { animation: gcOut 0.5s ease forwards; }
+@keyframes gcIn { 0% { opacity: 0; transform: translateY(-26px) scale(.82); } 60% { opacity: 1; } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+@keyframes gcOut { to { opacity: 0; transform: translateY(-18px) scale(.92); } }
+.gc-burst { font-size: 2em; line-height: 1; animation: gcPop .6s ease .08s both; }
+@keyframes gcPop { 0% { transform: scale(0) rotate(-30deg); } 70% { transform: scale(1.25) rotate(8deg); } 100% { transform: scale(1) rotate(0); } }
+.gc-headline { font-family: var(--font-d); font-size: clamp(2.3em, 7vw, 3.3em); line-height: 1; letter-spacing: .06em; margin: 2px 0 9px; background: linear-gradient(180deg, #fff, var(--tc)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+.gc-team { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 5px; }
+.gc-flag { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,.55); }
+.gc-abbr { font-family: var(--font-d); font-size: 1.3em; letter-spacing: .08em; color: var(--tc); }
+.gc-scorer { font-weight: 800; font-size: 1.12em; color: #fff; margin: 2px 0 10px; }
+.gc-min { color: var(--muted); font-weight: 700; margin-left: 4px; }
+.gc-tag { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; font-size: .6em; font-weight: 800; text-transform: uppercase; letter-spacing: .05em; background: var(--tc); color: #0b0f15; vertical-align: middle; }
+.gc-score { display: flex; align-items: center; justify-content: center; gap: 7px; font-family: var(--font-d); font-size: 1.7em; color: #fff; }
+.gc-score i { color: var(--muted); font-style: normal; margin: 0 3px; }
+.gc-score span { color: var(--muted); font-size: .6em; letter-spacing: .06em; }
+@media (max-width: 560px) { .gc-card { margin-top: 13vh; padding: 16px 24px 18px; } }
 </style>
 </head>
 <body>
@@ -1810,6 +1839,67 @@ function scoringSides(prevKey, curHome, curAway) {
   return sides;
 }
 
+/* === Célébration de but : carte animée « BUT ! / GOAL! » teintée à la couleur
+   de la NATION marqueuse, avec buteur + minute + nouveau score, auto-effacée.
+   File d'attente : plusieurs buts rapprochés s'enchaînent. === */
+const GoalCele = (() => {
+  let layer = null, queue = [], showing = false;
+  const escc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+  function ensureLayer() {
+    if (!layer) { layer = document.createElement('div'); layer.id = 'goal-cele-layer'; document.body.appendChild(layer); }
+    return layer;
+  }
+  function next() {
+    if (showing || !queue.length) return;
+    showing = true;
+    const g = queue.shift();
+    const color = g.color ? (String(g.color)[0] === '#' ? g.color : '#' + g.color) : '#fbc531';
+    const flag = g.logo ? `<img class="gc-flag" src="${escc(g.logo)}" alt="" onerror="this.style.display='none'">` : '';
+    const min = g.minute ? `<span class="gc-min">${escc(g.minute)}</span>` : '';
+    const tag = g.tag ? `<span class="gc-tag">${escc(g.tag)}</span>` : '';
+    const scorer = g.scorer ? `<div class="gc-scorer">${escc(g.scorer)} ${min}${tag}</div>` : '';
+    const card = document.createElement('div');
+    card.className = 'gc-card';
+    card.style.setProperty('--tc', color);
+    card.innerHTML =
+      `<div class="gc-burst">⚽</div>` +
+      `<div class="gc-headline">${escc(window.t ? window.t('cele_goal') : 'BUT !')}</div>` +
+      `<div class="gc-team">${flag}<span class="gc-abbr">${escc(g.abbr || '')}</span></div>` +
+      scorer +
+      `<div class="gc-score"><span>${escc(g.homeAbbr || '')}</span> <b>${escc(g.hs)}</b><i>–</i><b>${escc(g.as)}</b> <span>${escc(g.awayAbbr || '')}</span></div>`;
+    ensureLayer().appendChild(card);
+    void card.offsetWidth; card.classList.add('in');
+    setTimeout(() => {
+      card.classList.remove('in'); card.classList.add('out');
+      setTimeout(() => { card.remove(); showing = false; next(); }, 600);
+    }, 4600);
+  }
+  return { show(g) { queue.push(g); next(); } };
+})();
+
+// À partir du score qui change : récupère le buteur + la minute via les événements du match.
+async function celebrateGoal(scorerComp, hs, as, homeAbbr, awayAbbr, evId) {
+  const team = (scorerComp && scorerComp.team) || {};
+  let scorer = '', minute = '', tag = '';
+  try {
+    if (window.MatchEvents && evId) {
+      const goals = window.MatchEvents.goals(await window.MatchEvents.fetch(evId));
+      const mine = goals.filter(g => g.team === team.displayName);
+      const g = mine.length ? mine[mine.length - 1] : goals[goals.length - 1];
+      if (g) { scorer = window.MatchEvents.lastName(g.player); minute = g.clock; tag = window.MatchEvents.tag(g); }
+    }
+  } catch (e) {}
+  GoalCele.show({
+    abbr: team.abbreviation || (team.displayName || '').slice(0, 3).toUpperCase(),
+    color: team.color, logo: team.logo, scorer, minute, tag, hs, as, homeAbbr, awayAbbr
+  });
+}
+// Prévisualisation/test : window.goalCeleDemo() — par défaut « Demo Player 23' », France 1-0, bleu nation.
+window.goalCeleDemo = (opts) => GoalCele.show(Object.assign({
+  abbr: 'FRA', color: '#1e3a8a', logo: 'https://a.espncdn.com/i/teamlogos/countries/500/fra.png',
+  scorer: 'Demo Player', minute: "23'", tag: '', homeAbbr: 'FRA', awayAbbr: 'NOR', hs: 1, as: 0
+}, opts || {}));
+
 /* === Champion celebration (uses the shared engine) === */
 function launchConfetti() { Confetti.champion(); }
 
@@ -2242,9 +2332,8 @@ document.addEventListener('langchange', renderScorers);
       scoringSides(lastScore[ev.id], hs, as).forEach(side => {
         const scorer = side === 'home' ? home : away;
         Confetti.goal(side, scorer && scorer.team && scorer.team.color);
-        if (typeof toast === 'function') toast(`⚽ ${window.t('toast_goal')} ${abbr(scorer)}`, 'live', '🎉', 4000);
+        celebrateGoal(scorer, hs, as, abbr(home), abbr(away), ev.id); // carte « BUT ! » teintée nation
       });
-      if (typeof toast === 'function') toast(`${abbr(home)} ${hs} – ${as} ${abbr(away)}`, 'live', '⚽', 3000);
     }
     lastScore[ev.id] = key;
   }
