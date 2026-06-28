@@ -19,7 +19,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=14"></script>
+<script src="i18n.js?v=15"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -586,13 +586,13 @@ body::before {
 
 <div class="nav-tabs" id="nav-tabs">
   <div class="nav-tab-indicator" id="nav-tab-indicator"></div>
-  <button class="nav-tab active" onclick="showSection('groups',this)">
+  <button class="nav-tab" onclick="showSection('groups',this)">
     <span class="nav-tab-icon">🏟</span> <span data-i18n="tab_groups">PHASE DE GROUPES</span>
   </button>
   <button class="nav-tab" onclick="showSection('planning-poules',this)">
     <span class="nav-tab-icon">📅</span> <span data-i18n="tab_planning">PLANNING POULES</span>
   </button>
-  <button class="nav-tab" onclick="showSection('bracket',this)">
+  <button class="nav-tab active" onclick="showSection('bracket',this)">
     <span class="nav-tab-icon">⚔</span> <span data-i18n="tab_bracket">PHASE FINALE</span>
   </button>
   <button class="nav-tab" onclick="showSection('scorers',this)">
@@ -600,7 +600,7 @@ body::before {
   </button>
 </div>
 
-<div class="section visible" id="sec-groups">
+<div class="section" id="sec-groups">
   <div class="top-controls">
     <div class="filter-wrap">
       <span class="filter-icon">🔍</span>
@@ -622,7 +622,7 @@ body::before {
   <div class="scorers-wrap" id="scorers-wrap"></div>
 </div>
 
-<div class="section" id="sec-bracket">
+<div class="section visible" id="sec-bracket">
   <div class="bracket-wrap">
     <div class="bracket-title" data-i18n="bracket_title">Phase Finale</div>
     <div class="bracket-subtitle" data-i18n="bracket_subtitle">Cliquez sur un match pour modifier · 🔴 En cours = score affiché mais non comptabilisé · ✅ Terminé = pris en compte</div>
@@ -1519,6 +1519,16 @@ function buildViewerData() {
   };
 }
 
+// Renomme les titres de tour générés par brackets-viewer (« Round 1/2… ») en
+// libellés FR/EN : 16es de finale, 8es, quarts, demi, finale. Basé sur la distance
+// au dernier tour → robuste au nombre de tours. Ré-appliqué après chaque rendu.
+function relabelRoundTitles(wrap) {
+  const titles = [].slice.call(wrap.querySelectorAll('h3')).filter(h => /^\s*round\b/i.test(h.textContent || ''));
+  const n = titles.length;
+  const keyFor = (d) => d === 0 ? 'ko_final' : d === 1 ? 'ko_sf' : d === 2 ? 'ko_qf' : d === 3 ? 'ko_r16' : d === 4 ? 'ko_r32' : null;
+  titles.forEach((h, i) => { const k = keyFor(n - 1 - i); if (k) h.textContent = window.t(k); });
+}
+
 async function renderBracketTree() {
   if (!window.bracketsViewer) return;
   const wrap = document.getElementById('bracket-tree');
@@ -1549,6 +1559,7 @@ async function renderBracketTree() {
     console.warn('brackets-viewer render failed:', e);
     wrap.innerHTML = `<div class="bracket-loading err">${window.t('tree_render_error')}</div>`;
   }
+  relabelRoundTitles(wrap); // Round 1/2… → 16es, 8es, quarts, demi, finale
   // 3rd-place match rendered as a standalone card (reuses existing styling)
   const tp = document.getElementById('bracket-third-place');
   tp.innerHTML = `<div class="third-place-label">${window.t('third_place')}</div>`;

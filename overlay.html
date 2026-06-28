@@ -236,36 +236,66 @@
     return c ? (c.team.abbreviation || c.team.shortDisplayName || '') : '';
   }
 
-  // Affiche le dernier événement notable sous le score (statique) + l'équipe du joueur
-  async function updateFeed(ev) {
-    const f = bug.querySelector('.sb-feed');
-    const state = ev && ev.competitions[0].status.type.state;
-    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); return; }
-    const list = await fetchEv(ev.id);
-    paintCards(list, ev); // rappel cartons par équipe
-    // Pause fraîcheur en cours → encart spécial prioritaire
-    if ((evCache[ev.id] || {}).cooling) {
-      const el = feedEl();
-      el.className = 'sb-feed show cooling';
-      el.innerHTML = `<div class="fe-row"><span class="fe-emoji">💧</span><span class="fe-player">Pause fraîcheur</span></div>`;
-      return;
-    }
-    if (!list.length) { if (f) f.classList.remove('show'); return; }
-    const el = feedEl();
-    const newest = list[list.length - 1];
-    const sig = `${newest.kind}|${newest.clock}|${newest.player}`;
-    const isNew = feedSig[ev.id] && feedSig[ev.id] !== sig;
-    // TOUS les événements, du plus récent au plus ancien
-    el.innerHTML = list.slice().reverse().map(it => {
+  // Expiration des événements : un événement reste ~1 min sur l'overlay (à partir du
+  // moment où l'overlay le voit), puis disparaît. Le rappel cartons par équipe, lui,
+  // reste cumulatif (non concerné).
+  const FEED_TTL = 60000;   // 1 minute
+  const _feedSeen = {};     // clé événement -> 1er affichage (ms)
+  let _feedCur = null;      // { ev, list } courant, pour l'élagage entre deux fetchs
+  function recentEvents(evId, list) {
+    const now = Date.now();
+    return (list || []).filter(it => {
+      const k = `${evId}|${it.kind}|${it.clock}|${it.player}`;
+      if (_feedSeen[k] == null) _feedSeen[k] = now;
+      return now - _feedSeen[k] <= FEED_TTL;
+    });
+  }
+  function feedRowsHTML(ev, items) {
+    return items.slice().reverse().map(it => {
       const ab = teamAbbrOf(ev, it.team);
       const teamTag = ab ? `<span class="fe-team">${esc(ab)}</span>` : '';
       const tg = FEED_TAG[it.kind] ? `<span class="fe-tag">${FEED_TAG[it.kind]}</span>` : '';
       return `<div class="fe-row${it.kind === 'red' ? ' red' : ''}"><span class="fe-emoji">${FEED_EMOJI[it.kind]}</span><span class="fe-clock">${esc(it.clock)}</span>${teamTag}<span class="fe-player">${esc(lastName(it.player))}</span>${tg}</div>`;
     }).join('');
+  }
+
+  // Affiche les événements notables récents (< 1 min) sous le score + l'équipe du joueur
+  async function updateFeed(ev) {
+    const f = bug.querySelector('.sb-feed');
+    const state = ev && ev.competitions[0].status.type.state;
+    if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); _feedCur = null; return; }
+    const list = await fetchEv(ev.id);
+    paintCards(list, ev); // rappel cartons par équipe (liste complète, cumulatif)
+    // Pause fraîcheur en cours → encart spécial prioritaire
+    if ((evCache[ev.id] || {}).cooling) {
+      const el = feedEl();
+      el.className = 'sb-feed show cooling';
+      el.innerHTML = `<div class="fe-row"><span class="fe-emoji">💧</span><span class="fe-player">Pause fraîcheur</span></div>`;
+      _feedCur = null;
+      return;
+    }
+    _feedCur = { ev, list };
+    const recent = recentEvents(ev.id, list); // ne garde que ce qui a < 1 min
+    if (!recent.length) { if (f) f.classList.remove('show'); return; }
+    const el = feedEl();
+    const newest = list[list.length - 1];
+    const sig = `${newest.kind}|${newest.clock}|${newest.player}`;
+    const isNew = feedSig[ev.id] && feedSig[ev.id] !== sig;
+    el.innerHTML = feedRowsHTML(ev, recent);
     el.className = 'sb-feed show list';
     if (isNew) { void el.offsetWidth; el.classList.add('flash'); }
     feedSig[ev.id] = sig;
   }
+
+  // Élagage régulier : retire les événements de plus d'1 min même sans nouveau fetch.
+  setInterval(() => {
+    if (!_feedCur) return;
+    const f = bug.querySelector('.sb-feed');
+    if (!f || !f.classList.contains('list')) return; // épargne l'encart « pause fraîcheur »
+    const recent = recentEvents(_feedCur.ev.id, _feedCur.list);
+    if (!recent.length) { f.classList.remove('show'); _feedCur = null; return; }
+    f.innerHTML = feedRowsHTML(_feedCur.ev, recent);
+  }, 5000);
 
   function render(ev) {
     if (!ev) { bug.querySelector('.scorebug')?.classList.remove('show'); bug.querySelector('.sb-feed')?.classList.remove('show'); if (HIDE_EMPTY) bug.innerHTML = ''; return; }
