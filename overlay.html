@@ -89,6 +89,19 @@
   .sb-feed .fe-team { color: #cdd9e6; font-weight: 800; letter-spacing: .02em; }
   .sb-feed .fe-player { color: #fff; }
   .sb-feed .fe-tag { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: .04em; }
+  /* Séance de tirs au but */
+  .sb-feed.shootout { align-items: stretch; gap: 6px; }
+  .so-tracker { display: flex; flex-direction: column; gap: 5px; }
+  .so-row { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .so-flag { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+  .so-abbr { font-weight: 800; min-width: 36px; letter-spacing: .03em; color: var(--white); }
+  .so-score { font-weight: 800; min-width: 16px; text-align: center; color: var(--gold); font-variant-numeric: tabular-nums; }
+  .so-cells { display: inline-flex; gap: 3px; margin-left: 3px; }
+  .so-cell { width: 17px; height: 17px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; line-height: 1; }
+  .so-cell.scored { background: #1f9d57; color: #fff; }
+  .so-cell.missed { background: var(--red); color: #fff; }
+  .so-cell.pending { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.5); }
+  .so-row.win .so-abbr, .so-row.win .so-score { color: #34d36b; }
 </style>
 </head>
 <body>
@@ -259,6 +272,40 @@
     }).join('');
   }
 
+  // === Tirs au but : ESPN expose chaque tir dans competitions[0].details (shootout:true,
+  // scoringPlay = marqué/raté, team + tireur), dans l'ordre alterné. On reconstruit par équipe. ===
+  function shootoutData(ev) {
+    const comp = ev.competitions[0];
+    const cs = comp.competitors || [];
+    if (!cs.some(c => c.shootoutScore != null)) return null; // pas de séance
+    const home = cs.find(c => c.homeAway === 'home') || cs[0];
+    const away = cs.find(c => c.homeAway === 'away') || cs[1];
+    const seq = {}; seq[home.team.id] = []; seq[away.team.id] = [];
+    (comp.details || []).forEach(d => {
+      if (!d || !d.shootout) return;
+      const tid = d.team && d.team.id;
+      if (seq[tid]) seq[tid].push(!!d.scoringPlay); // true = marqué, false = raté/arrêté
+    });
+    const mk = (c) => ({ abbr: abbr(c), logo: logo(c), so: (c.shootoutScore != null ? c.shootoutScore : 0), kicks: seq[c.team.id] || [], winner: c.winner === true });
+    return { home: mk(home), away: mk(away) };
+  }
+  function soRow(t, slots) {
+    let cells = '';
+    for (let i = 0; i < slots; i++) {
+      cells += i < t.kicks.length
+        ? (t.kicks[i] ? '<span class="so-cell scored">O</span>' : '<span class="so-cell missed">✗</span>')
+        : `<span class="so-cell pending">${i + 1}</span>`;
+    }
+    const flag = t.logo ? `<img class="so-flag" src="${t.logo}" alt="">` : '<span class="so-flag"></span>';
+    return `<div class="so-row${t.winner ? ' win' : ''}">${flag}<span class="so-abbr">${esc(t.abbr)}</span><span class="so-score">${esc(t.so)}</span><span class="so-cells">${cells}</span></div>`;
+  }
+  function renderShootout(so) {
+    const slots = Math.max(5, so.home.kicks.length, so.away.kicks.length); // 5 + mort subite
+    const el = feedEl();
+    el.className = 'sb-feed show shootout';
+    el.innerHTML = `<div class="so-tracker">${soRow(so.home, slots)}${soRow(so.away, slots)}</div>`;
+  }
+
   // Affiche les événements notables récents (< 1 min) sous le score + l'équipe du joueur
   async function updateFeed(ev) {
     const f = bug.querySelector('.sb-feed');
@@ -266,6 +313,9 @@
     if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); _feedCur = null; return; }
     const list = await fetchEv(ev.id);
     paintCards(list, ev); // rappel cartons par équipe (liste complète, cumulatif)
+    // Séance de tirs au but en cours/terminée → tracker dédié (prioritaire)
+    const so = shootoutData(ev);
+    if (so) { renderShootout(so); _feedCur = null; return; }
     // Pause fraîcheur en cours → encart spécial prioritaire
     if ((evCache[ev.id] || {}).cooling) {
       const el = feedEl();
