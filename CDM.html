@@ -292,14 +292,15 @@ body::before {
   --connector-color: rgba(245,197,24,0.4);
   --border-color: rgba(255,255,255,0.12);
   --border-hover-color: rgba(245,197,24,0.55);
-  --round-margin: 40px;
-  --match-width: 230px;
-  --match-horizontal-padding: 12px;
-  --match-vertical-padding: 10px;
+  --round-margin: 26px;
+  --match-width: 208px;
+  --match-horizontal-padding: 10px;
+  --match-vertical-padding: 6px;
   --connector-border-width: 2px;
   --match-border-width: 1px;
   --match-border-radius: 8px;
   min-width: max-content;
+  font-size: 13px; /* arbre plus concentré (lib en px → texte plus dense) */
 }
 #bracket-tree.brackets-viewer { background: transparent; color: var(--font-color); }
 #bracket-tree h1, #bracket-tree h2, #bracket-tree h3 { color: var(--gold); }
@@ -628,15 +629,15 @@ body::before {
     <div class="bracket-subtitle" data-i18n="bracket_subtitle">Cliquez sur un match pour modifier · 🔴 En cours = score affiché mais non comptabilisé · ✅ Terminé = pris en compte</div>
 
     <div class="bracket-view-toggle">
-      <button class="bvt-btn active" data-view="cards" onclick="setBracketView('cards', this)" data-i18n="view_cards">🃏 Vue cartes</button>
-      <button class="bvt-btn" data-view="tree" onclick="setBracketView('tree', this)" data-i18n="view_tree">🌳 Vue arbre</button>
+      <button class="bvt-btn" data-view="cards" onclick="setBracketView('cards', this)" data-i18n="view_cards">🃏 Vue cartes</button>
+      <button class="bvt-btn active" data-view="tree" onclick="setBracketView('tree', this)" data-i18n="view_tree">🌳 Vue arbre</button>
     </div>
 
-    <div class="bracket-scroll" id="bracket-cards-wrap">
+    <div class="bracket-scroll" id="bracket-cards-wrap" style="display:none;">
       <div class="bracket" id="bracket"></div>
     </div>
 
-    <div id="bracket-tree-view" style="display:none;">
+    <div id="bracket-tree-view" style="display:block;">
       <div id="bracket-tree" class="brackets-viewer"></div>
       <div id="bracket-third-place"></div>
     </div>
@@ -1424,7 +1425,7 @@ function buildKoCard(m) {
    BRACKETS-VIEWER.JS — vue arbre relié (toggle), lazy-loaded.
    Synchronisée depuis koState ; clic match → modale existante.
    =========================================================== */
-let _bvLoaded = false, _bvLoading = null, _midToKo = {}, _bracketView = 'cards';
+let _bvLoaded = false, _bvLoading = null, _midToKo = {}, _bracketView = 'tree';
 
 function loadBracketsViewer() {
   if (_bvLoaded) return Promise.resolve();
@@ -1595,6 +1596,15 @@ async function setBracketView(view, btn) {
 }
 
 buildBracket();
+
+// Vue arbre par défaut : charge la lib brackets-viewer et rend l'arbre au démarrage
+if (_bracketView === 'tree') {
+  const _tEl = document.getElementById('bracket-tree');
+  if (_tEl) _tEl.innerHTML = `<div class="bracket-loading">${window.t('tree_loading')}</div>`;
+  loadBracketsViewer().then(renderBracketTree).catch(() => {
+    if (_tEl) _tEl.innerHTML = `<div class="bracket-loading err">${window.t('tree_error')}</div>`;
+  });
+}
 
 let currentMatchId = null;
 let modalStatus = 'pending';
