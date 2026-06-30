@@ -102,6 +102,24 @@
   .so-cell.missed { background: var(--red); color: #fff; }
   .so-cell.pending { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.5); }
   .so-row.win .so-abbr, .so-row.win .so-score { color: #34d36b; }
+  /* Célébration de but « BUT ! » */
+  #goal-cele-layer { position: fixed; inset: 0; z-index: 9500; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
+  .gc-card { --tc: #fbc531; margin-top: 14vh; min-width: 250px; max-width: 92vw; padding: 18px 32px 20px; border-radius: 22px; text-align: center; background: linear-gradient(180deg, rgba(14,20,28,0.97), rgba(8,12,18,0.99)); border: 2px solid var(--tc); box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 50px -8px var(--tc), inset 0 0 46px -24px var(--tc); opacity: 0; transform: translateY(-26px) scale(0.82); }
+  .gc-card.in { animation: gcIn 0.55s cubic-bezier(.18,.9,.28,1.3) forwards; }
+  .gc-card.out { animation: gcOut 0.5s ease forwards; }
+  @keyframes gcIn { 0% { opacity: 0; transform: translateY(-26px) scale(.82); } 60% { opacity: 1; } 100% { opacity: 1; transform: translateY(0) scale(1); } }
+  @keyframes gcOut { to { opacity: 0; transform: translateY(-18px) scale(.92); } }
+  .gc-burst { font-size: 1.9em; line-height: 1; animation: gcPop .6s ease .08s both; }
+  @keyframes gcPop { 0% { transform: scale(0) rotate(-30deg); } 70% { transform: scale(1.25) rotate(8deg); } 100% { transform: scale(1) rotate(0); } }
+  .gc-headline { font-family: var(--font-d); font-size: clamp(2.2em, 7vw, 3.2em); line-height: 1; letter-spacing: .06em; margin: 2px 0 9px; background: linear-gradient(180deg, #fff, var(--tc)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; }
+  .gc-team { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 5px; }
+  .gc-flag { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; box-shadow: 0 2px 8px rgba(0,0,0,.55); }
+  .gc-abbr { font-family: var(--font-d); font-size: 1.3em; letter-spacing: .08em; color: var(--tc); }
+  .gc-scorer { font-weight: 800; font-size: 1.1em; color: #fff; margin: 2px 0 10px; }
+  .gc-min { color: #8a9bb0; font-weight: 700; margin-left: 4px; }
+  .gc-score { display: flex; align-items: center; justify-content: center; gap: 7px; font-family: var(--font-d); font-size: 1.7em; color: #fff; }
+  .gc-score i { color: #8a9bb0; font-style: normal; margin: 0 3px; }
+  .gc-score span { color: #8a9bb0; font-size: .6em; letter-spacing: .06em; }
 </style>
 </head>
 <body>
@@ -209,6 +227,69 @@
       return list;
     } catch (e) { return (c && c.list) || []; }
   }
+
+  // === Célébration de but « BUT ! » (carte animée teintée à la nation marqueuse) ===
+  const GOAL_KINDS = ['goal', 'pen', 'freekick', 'owngoal'];
+  const GoalCele = (() => {
+    let layer = null, queue = [], showing = false;
+    const escc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+    function ensureLayer() {
+      if (!layer) { layer = document.createElement('div'); layer.id = 'goal-cele-layer'; document.body.appendChild(layer); }
+      return layer;
+    }
+    function next() {
+      if (showing || !queue.length) return;
+      showing = true;
+      const g = queue.shift();
+      const color = g.color ? (String(g.color)[0] === '#' ? g.color : '#' + g.color) : '#fbc531';
+      const flag = g.logo ? `<img class="gc-flag" src="${escc(g.logo)}" alt="" onerror="this.style.display='none'">` : '';
+      const min = g.minute ? `<span class="gc-min">${escc(g.minute)}</span>` : '';
+      const scorer = g.scorer ? `<div class="gc-scorer">${escc(g.scorer)} ${min}</div>` : '';
+      const card = document.createElement('div');
+      card.className = 'gc-card';
+      card.style.setProperty('--tc', color);
+      card.innerHTML =
+        `<div class="gc-burst">⚽</div>` +
+        `<div class="gc-headline">BUT !</div>` +
+        `<div class="gc-team">${flag}<span class="gc-abbr">${escc(g.abbr || '')}</span></div>` +
+        scorer +
+        `<div class="gc-score"><span>${escc(g.homeAbbr || '')}</span> <b>${escc(g.hs)}</b><i>–</i><b>${escc(g.as)}</b> <span>${escc(g.awayAbbr || '')}</span></div>`;
+      ensureLayer().appendChild(card);
+      void card.offsetWidth; card.classList.add('in');
+      setTimeout(() => {
+        card.classList.remove('in'); card.classList.add('out');
+        setTimeout(() => { card.remove(); showing = false; next(); }, 600);
+      }, 4600);
+    }
+    return { show(g) { queue.push(g); next(); } };
+  })();
+  // Prévisualisation : taper goalCeleDemo() dans la console (ou OBS → Interagir).
+  window.goalCeleDemo = (o) => GoalCele.show(Object.assign({ abbr: 'NOR', color: 'ba0c2f', logo: 'https://a.espncdn.com/i/teamlogos/countries/500/nor.png', scorer: 'Haaland', minute: "86'", homeAbbr: 'CIV', awayAbbr: 'NOR', hs: 1, as: 2 }, o || {}));
+  // Récupère le buteur + la minute via les événements du match, puis affiche la carte.
+  async function celebrateGoal(scorerComp, hs, as, homeAbbr, awayAbbr, evId) {
+    const team = (scorerComp && scorerComp.team) || {};
+    let scorer = '', minute = '';
+    try {
+      const list = await fetchEv(evId);
+      const goals = (list || []).filter(e => GOAL_KINDS.includes(e.kind));
+      const mine = goals.filter(e => e.team === team.displayName);
+      const g = mine.length ? mine[mine.length - 1] : goals[goals.length - 1];
+      if (g) { scorer = lastName(g.player); minute = g.clock; }
+    } catch (e) {}
+    GoalCele.show({
+      abbr: team.abbreviation || (team.displayName || '').slice(0, 3).toUpperCase(),
+      color: team.color, logo: team.logo, scorer, minute, hs, as, homeAbbr, awayAbbr
+    });
+  }
+  // Quel(s) côté(s) viennent de marquer (augmentation numérique du score)
+  function goalSides(prevKey, ch, ca) {
+    const p = (prevKey || '').split('-'); const ph = parseInt(p[0]), pa = parseInt(p[1]);
+    const sides = [];
+    if (!isNaN(ph) && parseInt(ch) > ph) sides.push('home');
+    if (!isNaN(pa) && parseInt(ca) > pa) sides.push('away');
+    return sides;
+  }
+
   function feedEl() {
     let f = bug.querySelector('.sb-feed');
     if (!f) { f = document.createElement('div'); f.className = 'sb-feed'; bug.appendChild(f); }
@@ -414,6 +495,7 @@
     if (state === 'in' && lastScore[ev.id] && lastScore[ev.id] !== key) {
       card.classList.remove('goal'); void card.offsetWidth; card.classList.add('goal');
       card.querySelectorAll('.v').forEach(v => { v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump'); });
+      goalSides(lastScore[ev.id], hs, as).forEach(side => celebrateGoal(side === 'home' ? home : away, hs, as, abbr(home), abbr(away), ev.id)); // carte « BUT ! »
     }
     lastScore[ev.id] = key;
 
