@@ -305,6 +305,7 @@ body::before {
 #bracket-tree.brackets-viewer { background: transparent; color: var(--font-color); }
 #bracket-tree h1, #bracket-tree h2, #bracket-tree h3 { color: var(--gold); }
 #bracket-tree .match .bv-date { font-size: 10px; font-weight: 800; letter-spacing: 0.04em; color: var(--gold); opacity: 0.9; text-align: center; padding: 1px 0 3px; }
+#bracket-tree .match .bv-date.live { color: #ff4757; opacity: 1; animation: pulse-live 1.6s infinite; }
 #bracket-tree .match { cursor: pointer; }
 #bracket-tree .opponents {
   background: rgba(22,33,48,0.92);
@@ -332,6 +333,7 @@ body::before {
 .ko-card.is-final { border-color: rgba(245,197,24,0.5); box-shadow: 0 0 24px rgba(245,197,24,0.15); }
 .ko-card.is-3p    { border-color: rgba(138,99,210,0.4); }
 .ko-card.live-ko  { border-color: rgba(255,71,87,0.5); }
+.ko-card-header .ko-live { color: var(--live, #ff4757); font-weight: 800; letter-spacing: 0.04em; animation: pulse-live 1.6s infinite; }
 .ko-card-header { padding: 4px 10px; font-size: 0.62em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; background: rgba(0,0,0,0.4); color: var(--muted); display: flex; align-items: center; justify-content: space-between; }
 .ko-card.is-final .ko-card-header { color: var(--gold); }
 .ko-card.is-3p   .ko-card-header  { color: #c39bd3; }
@@ -1431,7 +1433,9 @@ function buildKoCard(m) {
 
   card.innerHTML = `
     <div class="ko-card-header">
-      <span>${m.label || KO_DATES[m.id] || m.id.replace('_',' #').toUpperCase()}</span>
+      ${st.status === 'live'
+        ? `<span class="ko-live">🔴 ${window.t('live_badge')}</span>`
+        : `<span>${m.label || KO_DATES[m.id] || m.id.replace('_',' #').toUpperCase()}</span>`}
       <span class="ko-card-status-dot ${dotCls}" title="${st.status}"></span>
     </div>
     <div class="ko-card-team">
@@ -1562,11 +1566,13 @@ function injectMatchDates(wrap) {
     if (el.querySelector('.bv-date')) return;
     const idAttr = el.dataset.matchId;
     const koId = idAttr != null ? _midToKo[parseInt(idAttr, 10)] : null;
+    const st = koId ? koState[koId] : null;
+    const live = st && st.status === 'live';
     let day = (koId && KO_DATES[koId]) ? KO_DATES[koId].split('·')[0].trim() : '';
     if (!day) day = '19/07'; // match sans date connue = la finale (auto-générée)
     const lab = document.createElement('div');
-    lab.className = 'bv-date';
-    lab.textContent = day;
+    lab.className = live ? 'bv-date live' : 'bv-date';
+    lab.textContent = live ? ('🔴 ' + window.t('live_badge')) : day;
     el.insertBefore(lab, el.firstChild);
   });
 }
