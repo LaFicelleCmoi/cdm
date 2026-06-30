@@ -304,6 +304,7 @@ body::before {
 }
 #bracket-tree.brackets-viewer { background: transparent; color: var(--font-color); }
 #bracket-tree h1, #bracket-tree h2, #bracket-tree h3 { color: var(--gold); }
+#bracket-tree .match .bv-date { font-size: 10px; font-weight: 800; letter-spacing: 0.04em; color: var(--gold); opacity: 0.9; text-align: center; padding: 1px 0 3px; }
 #bracket-tree .match { cursor: pointer; }
 #bracket-tree .opponents {
   background: rgba(22,33,48,0.92);
@@ -1530,6 +1531,22 @@ function relabelRoundTitles(wrap) {
   titles.forEach((h, i) => { const k = keyFor(n - 1 - i); if (k) h.textContent = window.t(k); });
 }
 
+// Affiche le JOUR de chaque match dans l'arbre (via _midToKo → KO_DATES, heure de Paris).
+// Le match « finale » est généré automatiquement par brackets-viewer (sans koId) → 19/07.
+function injectMatchDates(wrap) {
+  wrap.querySelectorAll('.match').forEach(el => {
+    if (el.querySelector('.bv-date')) return;
+    const idAttr = el.dataset.matchId;
+    const koId = idAttr != null ? _midToKo[parseInt(idAttr, 10)] : null;
+    let day = (koId && KO_DATES[koId]) ? KO_DATES[koId].split('·')[0].trim() : '';
+    if (!day) day = '19/07'; // match sans date connue = la finale (auto-générée)
+    const lab = document.createElement('div');
+    lab.className = 'bv-date';
+    lab.textContent = day;
+    el.insertBefore(lab, el.firstChild);
+  });
+}
+
 async function renderBracketTree() {
   if (!window.bracketsViewer) return;
   const wrap = document.getElementById('bracket-tree');
@@ -1561,6 +1578,8 @@ async function renderBracketTree() {
     wrap.innerHTML = `<div class="bracket-loading err">${window.t('tree_render_error')}</div>`;
   }
   relabelRoundTitles(wrap); // Round 1/2… → 16es, 8es, quarts, demi, finale
+  injectMatchDates(wrap);   // jour de chaque match (KO_DATES)
+  setTimeout(() => injectMatchDates(wrap), 80); // rattrape le match « finale » rendu en différé
   // 3rd-place match rendered as a standalone card (reuses existing styling)
   const tp = document.getElementById('bracket-third-place');
   tp.innerHTML = `<div class="third-place-label">${window.t('third_place')}</div>`;
