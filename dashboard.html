@@ -20,7 +20,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=16"></script>
+<script src="i18n.js?v=17"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -493,6 +493,10 @@ body {
 
 .pc-close { pointer-events: auto; position: absolute; top: 12px; right: 12px; z-index: 2; width: 30px; height: 30px; border: none; border-radius: 50%; background: rgba(0,0,0,0.45); color: #fff; font-size: 1em; line-height: 30px; text-align: center; cursor: pointer; transition: background 0.15s; }
 .pc-close:hover { background: rgba(255,71,87,0.8); }
+.pc-status { pointer-events: none; position: absolute; top: 14px; left: 14px; z-index: 2; font-size: 0.62em; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; padding: 5px 12px; border-radius: 20px; }
+.pc-status:empty { display: none; }
+.pc-status.is-alive { color: #04220f; background: linear-gradient(180deg, #3ee07a, #16a34a); box-shadow: 0 0 16px rgba(34,197,94,0.45); }
+.pc-status.is-out { color: #fff; background: linear-gradient(180deg, #ff6b6b, #d63031); box-shadow: 0 0 16px rgba(214,48,49,0.45); }
 
 @media (max-width: 600px) {
   .nav-forward { position: relative; display: block; width: max-content; margin: 0 auto 30px; right: 0; }
@@ -1362,9 +1366,34 @@ function getTeamNextKO(name) {
   return cands[0] || null;
 }
 
+// Statut tournoi d'une équipe : 'alive' (encore un match à jouer/en cours → en lice)
+// ou 'out' (tous ses matchs sont terminés → éliminée). null si données absentes.
+function teamStatus(name) {
+  if (!_allEvents) return null;
+  let hasAny = false;
+  for (const ev of _allEvents) {
+    const c = ev.competitions && ev.competitions[0];
+    if (!c) continue;
+    if (!(c.competitors || []).some(x => x.team && frName(x.team.displayName) === name)) continue;
+    hasAny = true;
+    const st = c.status && c.status.type && c.status.type.state;
+    if (st === 'pre' || st === 'in') return 'alive'; // encore un match → en lice
+  }
+  return hasAny ? 'out' : null;
+}
+function setCardStatus(name) {
+  const el = document.getElementById('pc-status');
+  if (!el) return;
+  const s = teamStatus(name);
+  if (!s) { el.textContent = ''; el.className = 'pc-status'; return; }
+  el.textContent = window.t(s === 'alive' ? 'status_alive' : 'status_out');
+  el.className = 'pc-status ' + (s === 'alive' ? 'is-alive' : 'is-out');
+}
+
 function renderCountryResults(name) {
   const bottom = document.getElementById('pc-bottom');
   if (!bottom) return;
+  setCardStatus(name); // badge En lice / Éliminé (haut-gauche de la carte)
   const group = groupOf(name);
   const cta = `<a class="pc-cta" href="CDM.html?group=${encodeURIComponent(group)}">${window.t('view_group')} ${group} →</a>`;
   const results = getTeamResults(name);
@@ -1460,6 +1489,7 @@ function openCountryCard(name) {
     <div class="pixel-card" id="pixel-card" data-country="${name.replace(/"/g, '&quot;')}">
       <canvas></canvas>
       <button class="pc-close" onclick="closeCountryCard()" aria-label="Fermer">✕</button>
+      <div class="pc-status" id="pc-status"></div>
       <div class="pixel-card-inner">
         <div class="pc-group">${window.t('group')} ${group}</div>
         <div>
