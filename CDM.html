@@ -1261,6 +1261,29 @@ const KO_DATES = {
   sf_1:'14/07 · 21h00', sf_2:'15/07 · 21h00',
 };
 
+// Corrige les affiches du R32 avec les VRAIES oppositions ESPN : le côté « groupe »
+// (1X/2X) est déjà juste ; on remplace le côté « barragiste 3e » (attribué par
+// simulation, souvent faux car la règle FIFA dépend des groupes qualifiés) par le
+// véritable adversaire lu dans window._r32Opp (rempli depuis les matchs ESPN).
+function reconcileR32FromEspn() {
+  const opp = window._r32Opp;
+  if (!opp || !rounds[0]) return false;
+  let changed = false;
+  rounds[0].matches.forEach(m => {
+    const st = koState[m.id];
+    if (!st) return;
+    const t1Third = /^3e/.test(st.orig_t1 || '');
+    const t2Third = /^3e/.test(st.orig_t2 || '');
+    if (t1Third === t2Third) return;            // slot 2X v 2Y (pas de barragiste) → rien
+    const anchor = t1Third ? st.t2 : st.t1;     // côté groupe (déjà la vraie équipe)
+    const real = opp[anchor];                   // son vrai adversaire au R32
+    if (!real || real === (t1Third ? st.t1 : st.t2)) return;
+    if (t1Third) st.t1 = real; else st.t2 = real;
+    changed = true;
+  });
+  return changed;
+}
+
 function updateKnockoutStage() {
   let thirdPlaces = [];
   let allGroupsDone = true;
@@ -1320,6 +1343,7 @@ function updateKnockoutStage() {
       });
     });
   }
+  reconcileR32FromEspn(); // remplace les barragistes simulés par les vraies affiches ESPN
   buildBracket();
 }
 
@@ -2475,6 +2499,20 @@ document.addEventListener('langchange', renderScorers);
     return null;
   }
 
+  // Mémorise les vraies oppositions du R32 (round-of-32) vues sur ESPN, pour
+  // corriger les barragistes (3e) simulés dans le bracket.
+  function recordR32(events) {
+    if (!Array.isArray(events)) return;
+    window._r32Opp = window._r32Opp || {};
+    events.forEach(ev => {
+      if (!ev || !ev.season || ev.season.slug !== 'round-of-32') return;
+      const cs = (ev.competitions[0] && ev.competitions[0].competitors) || [];
+      if (cs.length < 2 || !cs[0].team || !cs[1].team) return;
+      const a = frName(cs[0].team.displayName), b = frName(cs[1].team.displayName);
+      if (a && b && a !== b) { window._r32Opp[a] = b; window._r32Opp[b] = a; }
+    });
+  }
+
   function syncSimFromEspn(events) {
     events.forEach(ev => {
       const comp = ev.competitions[0];
@@ -2552,7 +2590,9 @@ document.addEventListener('langchange', renderScorers);
 
   function update(data) {
     const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
+    recordR32(events); // vraies oppositions du R32 (corrige les barragistes simulés)
     syncSimFromEspn(events); // mirror real live/finished scores into the simulator
+    if (typeof reconcileR32FromEspn === 'function' && reconcileR32FromEspn() && typeof buildBracket === 'function') buildBracket();
     const stateOf = e => e.competitions[0].status.type.state;
     const live = events.filter(e => stateOf(e) === 'in');
     _hasLive = live.length > 0; // pilote la cadence de rafraîchissement
@@ -2607,7 +2647,9 @@ document.addEventListener('langchange', renderScorers);
       const data = await res.json();
       const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
       const before = countSimResults();
+      recordR32(events); // vraies oppositions du R32 (tout le tournoi)
       syncSimFromEspn(events);
+      if (typeof reconcileR32FromEspn === 'function' && reconcileR32FromEspn() && typeof buildBracket === 'function') buildBracket();
       const after = countSimResults();
       _lastCatchUp = Date.now();
       const recovered = events.filter(e => ['in', 'post'].includes(e.competitions[0].status.type.state)).length;
