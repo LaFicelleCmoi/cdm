@@ -280,12 +280,23 @@
     if (!cs.some(c => c.shootoutScore != null)) return null; // pas de séance
     const home = cs.find(c => c.homeAway === 'home') || cs[0];
     const away = cs.find(c => c.homeAway === 'away') || cs[1];
-    const seq = {}; seq[home.team.id] = []; seq[away.team.id] = [];
-    (comp.details || []).forEach(d => {
-      if (!d || !d.shootout) return;
-      const tid = d.team && d.team.id;
-      if (seq[tid]) seq[tid].push(!!d.scoringPlay); // true = marqué, false = raté/arrêté
-    });
+    const homeId = home.team.id, awayId = away.team.id;
+    const seq = {}; seq[homeId] = []; seq[awayId] = [];
+    // ESPN ne liste QUE les tirs marqués → on reconstitue les ratés via les « trous »
+    // dans l'alternance (un tir omis = raté). Gère aussi les ratés explicites.
+    const dets = (comp.details || [])
+      .filter(d => d && d.shootout && d.team && (d.team.id === homeId || d.team.id === awayId))
+      .map(d => ({ team: d.team.id, scored: !!d.scoringPlay && !/miss|saved|fail/i.test((d.type && d.type.text) || '') }));
+    if (dets.length) {
+      const order = [dets[0].team, dets[0].team === homeId ? awayId : homeId];
+      let di = 0, kn = 0, guard = 0;
+      while (di < dets.length && guard++ < 40) {
+        const expected = order[kn % 2];
+        if (dets[di].team === expected) { seq[expected].push(dets[di].scored); di++; }
+        else seq[expected].push(false); // tir omis par ESPN = raté
+        kn++;
+      }
+    }
     const mk = (c) => ({ abbr: abbr(c), logo: logo(c), so: (c.shootoutScore != null ? c.shootoutScore : 0), kicks: seq[c.team.id] || [], winner: c.winner === true });
     return { home: mk(home), away: mk(away) };
   }
