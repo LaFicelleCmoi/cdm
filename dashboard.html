@@ -1328,11 +1328,13 @@ class Pixel {
 
 function attachPixelCanvas(canvas, colors, { gap = 5, speed = 0.07 } = {}) {
   const ctx = canvas.getContext('2d');
-  let pixels = [], raf = null, w = 0, h = 0;
+  let pixels = [], raf = null, w = 0, h = 0, frames = 0;
 
   function build() {
     const rect = canvas.getBoundingClientRect();
-    const dpr = window.devicePixelRatio || 1;
+    // dpr plafonné : sur écran haute densité, le canvas doublait/triplait le
+    // nombre réel de pixels à peindre à chaque image
+    const dpr = Math.min(window.devicePixelRatio || 1, 1.5);
     w = rect.width; h = rect.height;
     canvas.width = w * dpr; canvas.height = h * dpr;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
@@ -1354,11 +1356,16 @@ function attachPixelCanvas(canvas, colors, { gap = 5, speed = 0.07 } = {}) {
     let allIdle = true;
     for (const p of pixels) { p[fn](); if (!p.isIdle) allIdle = false; }
     if (fn === 'disappear' && allIdle) { cancelAnimationFrame(raf); raf = null; }
+    // FIGE le scintillement après ~2,5 s (160 images) : les pixels entrent en
+    // « shimmer » infini et la boucle ne s'arrêtait JAMAIS → des milliers de
+    // pixels redessinés 60×/s tant que la carte restait ouverte = page qui rame.
+    // (survoler la carte relance brièvement l'effet, comme avant)
+    if (fn === 'appear' && ++frames > 160) { cancelAnimationFrame(raf); raf = null; }
   }
   function stop() { if (raf) { cancelAnimationFrame(raf); raf = null; } }
 
   return {
-    appear() { stop(); pixels.forEach(p => { p.isIdle = false; }); loop('appear'); },
+    appear() { stop(); frames = 0; pixels.forEach(p => { p.isIdle = false; }); loop('appear'); },
     disappear() { stop(); loop('disappear'); },
     rebuild() { build(); },
     build
@@ -1568,7 +1575,8 @@ function openCountryCard(name) {
   const canvas = card.querySelector('canvas');
   // DA du site : palette or / blanc / rouge
   const palette = ['#fbc531', '#f5d76e', '#ffffff', '#ff4757', '#ffd966'];
-  _pixelCtl = attachPixelCanvas(canvas, palette, { gap: 5, speed: 0.08 });
+  // gap 5→7 : ~2× moins de pixels à animer, densité visuelle quasi identique
+  _pixelCtl = attachPixelCanvas(canvas, palette, { gap: 7, speed: 0.08 });
   _pixelCtl.build();   // synchrone : getBoundingClientRect force le layout → canvas dimensionné
   _pixelCtl.appear();  // reveal animé on open
   // Re-trigger on hover (faithful to ReactBits behaviour)
