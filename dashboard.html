@@ -1098,7 +1098,9 @@ document.addEventListener('visibilitychange', () => {
 });
 // Re-render the live block instantly when the language changes (from cache), then refresh
 document.addEventListener('langchange', () => {
-  if (_lastLiveData) renderLiveScores(_lastLiveData); fetchLiveScores();
+  // re-rend depuis le cache ; ne re-fetch que si aucun cache (évite les fetchs
+  // en rafale au chargement, langchange étant déclenché pendant l'init)
+  if (_lastLiveData) renderLiveScores(_lastLiveData); else fetchLiveScores();
   if (typeof renderFavHero === 'function') renderFavHero(); // re-traduit le hero favori
   const openCard = document.querySelector('.pixel-card[data-country]');
   if (openCard) renderCountryResults(openCard.dataset.country); // re-traduit le parcours
@@ -1509,16 +1511,16 @@ function renderCountryResults(name) {
 // Buteurs de l'équipe (async) : agrège les buts de ses matchs + tooltips par match
 async function loadCountryScorers(name, results) {
   if (!window.MatchEvents) return;
-  const tally = {}; const perMatch = [];
-  for (let i = 0; i < results.length; i++) {
-    let scorers = [];
+  // Tous les matchs en PARALLÈLE : le for séquentiel additionnait les latences
+  // (4 matchs = 4 aller-retours à la suite → la ligne buteurs traînait à s'afficher)
+  const perMatch = await Promise.all(results.map(async (r) => {
     try {
-      const list = await MatchEvents.fetch(results[i].id);
-      scorers = list.filter(e => ['goal', 'pen', 'freekick'].includes(e.kind) && frName(e.team) === name);
-    } catch (e) {}
-    perMatch[i] = scorers;
-    scorers.forEach(s => { if (s.player) tally[s.player] = (tally[s.player] || 0) + 1; });
-  }
+      const list = await MatchEvents.fetch(r.id);
+      return list.filter(e => ['goal', 'pen', 'freekick'].includes(e.kind) && frName(e.team) === name);
+    } catch (e) { return []; }
+  }));
+  const tally = {};
+  perMatch.forEach(sc => sc.forEach(s => { if (s.player) tally[s.player] = (tally[s.player] || 0) + 1; }));
   // carte changée entre-temps ? on abandonne
   const card = document.querySelector('.pixel-card[data-country]');
   if (!card || card.dataset.country !== name) return;

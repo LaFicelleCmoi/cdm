@@ -1141,7 +1141,9 @@ function calcGroup(g) {
   });
 
   renderGroup(g);
-  updateKnockoutStage();
+  // À l'init, updateKnockoutStage (→ reconstruction complète du bracket) était
+  // exécuté 12 fois (une par poule) : on ne le fait qu'une fois, dans loadData.
+  if(!isInitializing) updateKnockoutStage();
   if(!isInitializing) saveData();
 }
 
@@ -1870,6 +1872,7 @@ function loadData() {
     }
   }
   groupKeys.forEach(g => { calcGroup(g); });
+  updateKnockoutStage(); // une seule reconstruction du bracket pour les 12 poules
 }
 
 /* ===========================================================
