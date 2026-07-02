@@ -19,7 +19,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=17"></script>
+<script src="i18n.js?v=18"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -1007,7 +1007,9 @@ rawPlanning.forEach(day => {
 
         const card = document.createElement('div');
         card.className = 'poule-match-card';
-        card.setAttribute('onclick', `openGroupModal('${m.g}', ${mn}, '${canonicalT1}', '${canonicalT2}', ${isReversed})`);
+        // Listener avec closure (PAS d'attribut onclick inline : l'apostrophe de
+        // « Côte d'Ivoire » y produisait un SyntaxError → modale jamais ouverte)
+        card.addEventListener('click', () => openGroupModal(m.g, mn, canonicalT1, canonicalT2, isReversed));
 
         const channelsHTML = m.tf1 
             ? `<span class="tv-tag bein">beIN</span><span class="tv-tag tf1">TF1</span>` 
@@ -1267,20 +1269,46 @@ const KO_DATES = {
 // (1X/2X) est déjà juste ; on remplace le côté « barragiste 3e » (attribué par
 // simulation, souvent faux car la règle FIFA dépend des groupes qualifiés) par le
 // véritable adversaire lu dans window._r32Opp (rempli depuis les matchs ESPN).
+// Clé « JJMMHHMM » (heure de Paris) d'une date ISO — pour apparier un événement
+// ESPN au slot R32 via sa date officielle KO_DATES ('30/06 · 03h00' → '30060300').
+function r32DateKey(iso) {
+  try {
+    return new Intl.DateTimeFormat('fr-FR', { timeZone: 'Europe/Paris', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false })
+      .format(new Date(iso)).replace(/\D/g, '');
+  } catch (e) { return ''; }
+}
+
 function reconcileR32FromEspn() {
-  const opp = window._r32Opp;
-  if (!opp || !rounds[0]) return false;
+  const opp = window._r32Opp, byKey = window._r32ByKey;
+  if ((!opp && !byKey) || !rounds[0]) return false;
   let changed = false;
   rounds[0].matches.forEach(m => {
     const st = koState[m.id];
     if (!st) return;
+    // 1) Appariement PRÉCIS par la date officielle du slot : corrige n'importe
+    //    quel côté faux — y compris les slots 2X v 2Y sans barragiste, quand le
+    //    classement simulé a mal départagé une égalité parfaite (pts/DB/BP).
+    const key = KO_DATES[m.id] ? KO_DATES[m.id].replace(/\D/g, '') : '';
+    const real = byKey && byKey[key];
+    if (real) {
+      if (!([st.t1, st.t2].includes(real.a) && [st.t1, st.t2].includes(real.b))) {
+        // conserve un côté déjà juste, sinon aligne sur l'ordre ESPN
+        if (st.t1 === real.a || st.t2 === real.b) { st.t1 = real.a; st.t2 = real.b; }
+        else { st.t1 = real.b; st.t2 = real.a; }
+        changed = true;
+      }
+      return;
+    }
+    // 2) Repli (pas d'événement daté) : côté barragiste (3e) remplacé par le
+    //    vrai adversaire du côté groupe.
+    if (!opp) return;
     const t1Third = /^3e/.test(st.orig_t1 || '');
     const t2Third = /^3e/.test(st.orig_t2 || '');
-    if (t1Third === t2Third) return;            // slot 2X v 2Y (pas de barragiste) → rien
+    if (t1Third === t2Third) return;            // slot 2X v 2Y → géré par (1) seulement
     const anchor = t1Third ? st.t2 : st.t1;     // côté groupe (déjà la vraie équipe)
-    const real = opp[anchor];                   // son vrai adversaire au R32
-    if (!real || real === (t1Third ? st.t1 : st.t2)) return;
-    if (t1Third) st.t1 = real; else st.t2 = real;
+    const realOpp = opp[anchor];                // son vrai adversaire au R32
+    if (!realOpp || realOpp === (t1Third ? st.t1 : st.t2)) return;
+    if (t1Third) st.t1 = realOpp; else st.t2 = realOpp;
     changed = true;
   });
   return changed;
@@ -1359,6 +1387,11 @@ function koResolved(id) {
   const s2 = st.s2 !== '' ? parseInt(st.s2) : null;
   let w = st.winner || '';
   if (!w && s1 !== null && s2 !== null) w = s1 > s2 ? st.t1 : s2 > s1 ? st.t2 : '';
+  // Repli : scores égaux + winner absent, mais tirs au but renseignés
+  if (!w && st.so1 !== '' && st.so1 != null && st.so2 !== '' && st.so2 != null) {
+    const a = parseInt(st.so1), b = parseInt(st.so2);
+    if (!isNaN(a) && !isNaN(b) && a !== b) w = a > b ? st.t1 : st.t2;
+  }
   if (!w) return null;
   const l = (w === st.t1) ? st.t2 : st.t1;
   return { w, l };
@@ -1720,7 +1753,7 @@ function openModal(id, label, headerCls) {
   hint.className = 'modal-hint';
   if (locked) {
     const stTxt = st.status === 'live' ? window.t('match_live_txt') : st.status === 'done' ? window.t('match_done_txt') : window.t('match_pre_txt');
-    const soTxt = (st.so1 !== '' && st.so2 !== '' && st.so1 != null && st.so2 != null) ? `<br>🥅 Tirs au but : ${st.so1}–${st.so2}` : '';
+    const soTxt = (st.so1 !== '' && st.so2 !== '' && st.so1 != null && st.so2 != null) ? `<br>🥅 ${window.t('shootout_word')} : ${st.so1}–${st.so2}` : '';
     hint.innerHTML = `${window.t('sync_lock_hint')}<br>${stTxt}${soTxt}`;
     hint.style.color = 'var(--muted)';
   } else {
@@ -1810,7 +1843,15 @@ function saveData() {
 function loadData() {
   const saved = localStorage.getItem('cdm2026_data');
   if(saved) {
-    const data = JSON.parse(saved);
+    let data;
+    try { data = JSON.parse(saved); }
+    catch (e) {
+      // Donnée corrompue : sans ce garde, l'exception tuait TOUT le script
+      // (widget, synchro, buteurs) sans auto-réparation possible.
+      console.warn('loadData: données locales corrompues, réinitialisation', e);
+      localStorage.removeItem('cdm2026_data');
+      data = {};
+    }
     if(data.matchStatus) Object.assign(matchStatus, data.matchStatus);
     if(data.groupScores) {
       for(const [id, val] of Object.entries(data.groupScores)) {
@@ -2272,7 +2313,7 @@ document.addEventListener('langchange', renderScorers);
   } catch (e) {}
   // Rafraîchissement périodique tant que l'onglet est visible (totaux qui montent en direct)
   setInterval(() => {
-    const visible = sec.classList.contains('active') || sec.offsetParent !== null;
+    const visible = sec.classList.contains('visible') || sec.offsetParent !== null;
     if (visible && document.visibilityState === 'visible') fetchLiveScorers(true);
   }, 40000);
 })();
@@ -2371,6 +2412,7 @@ document.addEventListener('langchange', renderScorers);
       : (extraLive > 0 ? `<div class="lw-more">+ ${extraLive} ${extraLive > 1 ? window.t('more_live_many') : window.t('more_live_one')}</div>` : '');
 
     el.className = `live-widget shown state-${state}`;
+    el.dataset.evId = ev.id; // tague le match affiché (garde anti-course du feed)
     el.innerHTML = `
       <div class="lw-top">
         ${badge}
@@ -2413,6 +2455,9 @@ document.addEventListener('langchange', renderScorers);
     if (!window.MatchEvents) return;
     let list = [];
     try { list = await MatchEvents.fetch(ev.id); } catch (e) { return; }
+    // La rotation (6 s) a pu re-rendre un AUTRE match pendant l'await :
+    // sans ce garde, les buteurs/cartons du match A s'affichaient sous le match B.
+    if (el.dataset.evId !== String(ev.id)) return;
     const notable = MatchEvents.notable(list);
 
     // 1) Pause fraîcheur en cours → encart spécial ; sinon dernier événement notable
@@ -2515,7 +2560,12 @@ document.addEventListener('langchange', renderScorers);
       const cs = (ev.competitions[0] && ev.competitions[0].competitors) || [];
       if (cs.length < 2 || !cs[0].team || !cs[1].team) return;
       const a = frName(cs[0].team.displayName), b = frName(cs[1].team.displayName);
-      if (a && b && a !== b) { window._r32Opp[a] = b; window._r32Opp[b] = a; }
+      if (a && b && a !== b) {
+        window._r32Opp[a] = b; window._r32Opp[b] = a;
+        // affiche indexée par la date officielle (appariement précis slot ↔ match)
+        const k = (typeof r32DateKey === 'function') ? r32DateKey(ev.date) : '';
+        if (k) { window._r32ByKey = window._r32ByKey || {}; window._r32ByKey[k] = { a, b }; }
+      }
     });
   }
 
@@ -2533,8 +2583,11 @@ document.addEventListener('langchange', renderScorers);
       if (isNaN(hs) || isNaN(as)) return;
       const byName = { [t1]: hs, [t2]: as };
 
-      // 1) Phase de groupes
-      const gm = findGroupMatch(t1, t2);
+      // 1) Phase de groupes — UNIQUEMENT pour les matchs de poule : deux équipes
+      // d'un même groupe peuvent se recroiser en phase finale (dès les quarts) ;
+      // sans ce garde, ce match KO serait routé vers la poule (résultat écrasé).
+      const isKO = ev.season && ev.season.slug && ev.season.slug !== 'group-stage';
+      const gm = isKO ? null : findGroupMatch(t1, t2);
       if (gm) {
         const cur = matchStatus[gm.key];
         if (cur === 'done' && !_autoSynced.has(gm.key)) return; // respecte un done manuel
@@ -2586,7 +2639,7 @@ document.addEventListener('langchange', renderScorers);
           buildBracket();           // propage les vainqueurs (advanceKnockout) + rerend
           if (typeof saveData === 'function') saveData();
           if (typeof checkChampion === 'function') checkChampion();
-          const soTxt = (hasSO && nso1 !== '' && nso2 !== '') ? ` (${nso1}-${nso2} t.a.b.)` : '';
+          const soTxt = (hasSO && nso1 !== '' && nso2 !== '') ? ` (${nso1}-${nso2} ${window.t('shootout_abbr')})` : '';
           if (typeof toast === 'function') toast(`🔄 Sync ${st.t1} ${ns1}–${ns2}${soTxt} ${st.t2}`, newStatus === 'done' ? 'done' : 'live', '🔄', 2800);
         }
         break;
@@ -2597,8 +2650,10 @@ document.addEventListener('langchange', renderScorers);
   function update(data) {
     const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
     recordR32(events); // vraies oppositions du R32 (corrige les barragistes simulés)
-    syncSimFromEspn(events); // mirror real live/finished scores into the simulator
+    // Réconcilier AVANT la synchro : sinon les scores des slots encore faux
+    // (équipe simulée ≠ vraie affiche) sont ignorés silencieusement.
     if (typeof reconcileR32FromEspn === 'function' && reconcileR32FromEspn() && typeof buildBracket === 'function') buildBracket();
+    syncSimFromEspn(events); // mirror real live/finished scores into the simulator
     const stateOf = e => e.competitions[0].status.type.state;
     const live = events.filter(e => stateOf(e) === 'in');
     _hasLive = live.length > 0; // pilote la cadence de rafraîchissement
@@ -2654,8 +2709,9 @@ document.addEventListener('langchange', renderScorers);
       const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
       const before = countSimResults();
       recordR32(events); // vraies oppositions du R32 (tout le tournoi)
-      syncSimFromEspn(events);
+      // Réconcilier AVANT la synchro (les scores des slots faux seraient ignorés)
       if (typeof reconcileR32FromEspn === 'function' && reconcileR32FromEspn() && typeof buildBracket === 'function') buildBracket();
+      syncSimFromEspn(events);
       const after = countSimResults();
       _lastCatchUp = Date.now();
       const recovered = events.filter(e => ['in', 'post'].includes(e.competitions[0].status.type.state)).length;

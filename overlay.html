@@ -201,9 +201,9 @@
     return 'other';
   }
   const lastName = (f) => { if (!f) return ''; const p = f.trim().split(/\s+/); return p.length > 1 ? p.slice(1).join(' ') : f; };
-  async function fetchEv(id) {
+  async function fetchEv(id, force) {
     const c = evCache[id];
-    if (c && Date.now() - c.ts < 20000) return c.list;
+    if (!force && c && Date.now() - c.ts < 20000) return c.list;
     try {
       const r = await fetch(SUMMARY + id, { cache: 'no-store', signal: tmo(8000) });
       if (!r.ok) throw 0;
@@ -270,10 +270,16 @@
     const team = (scorerComp && scorerComp.team) || {};
     let scorer = '', minute = '';
     try {
-      const list = await fetchEv(evId);
-      const goals = (list || []).filter(e => GOAL_KINDS.includes(e.kind));
-      const mine = goals.filter(e => e.team === team.displayName);
-      const g = mine.length ? mine[mine.length - 1] : goals[goals.length - 1];
+      // Buts de CETTE équipe uniquement (un CSC adverse compte pour nous) —
+      // jamais de repli inter-équipes : mieux vaut aucun buteur qu'un buteur adverse.
+      const pick = (list) => {
+        const mine = (list || []).filter(e => GOAL_KINDS.includes(e.kind) &&
+          (e.kind === 'owngoal' ? e.team !== team.displayName : e.team === team.displayName));
+        return mine[mine.length - 1];
+      };
+      // force=true : le but vient d'arriver, le cache 20 s serait périmé
+      let g = pick(await fetchEv(evId, true));
+      if (!g) { await new Promise(r => setTimeout(r, 4000)); g = pick(await fetchEv(evId, true)); } // le summary peut retarder sur le scoreboard
       if (g) { scorer = lastName(g.player); minute = g.clock; }
     } catch (e) {}
     GoalCele.show({
@@ -377,6 +383,14 @@
         else seq[expected].push(false); // tir omis par ESPN = raté
         kn++;
       }
+      // Raté DÉCISIF (dernier tir de la séance, omis par ESPN : aucun tir suivant
+      // ne crée de « trou ») : si la séance est finie et que l'alternance attendait
+      // le perdant, matérialise sa ✗ finale.
+      const winId = home.winner === true ? homeId : away.winner === true ? awayId : null;
+      if (winId) {
+        const loseId = winId === homeId ? awayId : homeId;
+        if (order[kn % 2] === loseId && seq[loseId].length < seq[winId].length + 1) seq[loseId].push(false);
+      }
     }
     const mk = (c) => ({ abbr: abbr(c), logo: logo(c), so: (c.shootoutScore != null ? c.shootoutScore : 0), kicks: seq[c.team.id] || [], winner: c.winner === true });
     return { home: mk(home), away: mk(away) };
@@ -404,6 +418,10 @@
     const state = ev && ev.competitions[0].status.type.state;
     if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); _feedCur = null; return; }
     const list = await fetchEv(ev.id);
+    // Rotation multi-matchs : si le scorebug a changé de match pendant l'await,
+    // ne pas peindre les événements/cartons du match A sous le scorebug du match B.
+    const curCard = bug.querySelector('.scorebug');
+    if (curCard && curCard.dataset.id !== String(ev.id)) return;
     paintCards(list, ev); // rappel cartons par équipe (liste complète, cumulatif)
     // Séance de tirs au but en cours/terminée → tracker dédié (prioritaire)
     const so = shootoutData(ev);
@@ -431,6 +449,9 @@
 
   // Élagage régulier : retire les événements de plus d'1 min même sans nouveau fetch.
   setInterval(() => {
+    // purge le cache summary des matchs plus affichés (overlay OBS allumé des heures)
+    const nowMs = Date.now();
+    for (const id in evCache) { if (evCache[id] && nowMs - evCache[id].ts > 600000) delete evCache[id]; }
     if (!_feedCur) return;
     const f = bug.querySelector('.sb-feed');
     if (!f || !f.classList.contains('list')) return; // épargne l'encart « pause fraîcheur »
@@ -462,6 +483,9 @@
     const fresh = !card || card.dataset.id !== ev.id;
     if (fresh) {
       if (card) card.remove();
+      // masque le feed de l'ancien match (le temps que celui du nouveau charge)
+      const staleFeed = bug.querySelector('.sb-feed');
+      if (staleFeed) staleFeed.classList.remove('show');
       card = document.createElement('div');
       card.className = `scorebug state-${state}${interrupted ? ' delayed' : ''}`;
       card.dataset.id = ev.id;
@@ -490,12 +514,16 @@
       st.innerHTML = clockHTML(statusTxt); // clockHTML échappe + colore le temps additionnel
     }
 
-    // détection de but → flash + bump
+    // détection de but → flash + bump, SEULEMENT si un score augmente
+    // (pas au coup d'envoi « –-– » → « 0-0 », ni sur but annulé par la VAR)
     const key = `${hs}-${as}`;
     if (state === 'in' && lastScore[ev.id] && lastScore[ev.id] !== key) {
-      card.classList.remove('goal'); void card.offsetWidth; card.classList.add('goal');
-      card.querySelectorAll('.v').forEach(v => { v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump'); });
-      goalSides(lastScore[ev.id], hs, as).forEach(side => celebrateGoal(side === 'home' ? home : away, hs, as, abbr(home), abbr(away), ev.id)); // carte « BUT ! »
+      const sides = goalSides(lastScore[ev.id], hs, as);
+      if (sides.length) {
+        card.classList.remove('goal'); void card.offsetWidth; card.classList.add('goal');
+        card.querySelectorAll('.v').forEach(v => { v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump'); });
+        sides.forEach(side => celebrateGoal(side === 'home' ? home : away, hs, as, abbr(home), abbr(away), ev.id)); // carte « BUT ! »
+      }
     }
     lastScore[ev.id] = key;
 

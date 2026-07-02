@@ -20,7 +20,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=17"></script>
+<script src="i18n.js?v=18"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -417,7 +417,26 @@ body {
 @media (max-width: 640px) { .fav-hero-card { flex-wrap: wrap; } .fav-hero-actions { flex-direction: row; width: 100%; } .fav-hero-actions button { flex: 1; } }
 
 .live-card.fav-match { border-color: rgba(251,197,49,0.6) !important; box-shadow: 0 0 0 1px rgba(251,197,49,0.4), 0 10px 30px rgba(0,0,0,0.45); }
-.live-card.fav-match::after { content: '★'; position: absolute; top: 8px; right: 10px; color: var(--gold); font-size: 0.9em; z-index: 3; }
+/* inset:auto + background:none + opacity:1 : annule l'héritage du glow .live-card::after
+   (sans quoi l'étoile héritait opacity:0 + fond radial et n'apparaissait qu'au survol) */
+.live-card.fav-match::after { content: '★'; position: absolute; inset: auto; top: 8px; right: 10px; background: none; opacity: 1; color: var(--gold); font-size: 0.9em; z-index: 3; }
+
+/* Toasts (portés de CDM.html : la fonction toast() était appelée mais jamais définie ici) */
+#toast-stack { position: fixed; top: 20px; right: 20px; z-index: 1300; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
+.toast {
+  background: rgba(15, 25, 35, 0.95); border: 1px solid rgba(255,255,255,0.1); border-left: 3px solid var(--gold);
+  color: #fff; padding: 12px 18px; border-radius: 10px; font-size: 0.85em; font-weight: 600;
+  box-shadow: 0 12px 40px rgba(0,0,0,0.5); backdrop-filter: blur(10px);
+  display: flex; align-items: center; gap: 10px; min-width: 220px; max-width: 340px;
+  transform: translateX(120%); opacity: 0; transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.3s;
+  pointer-events: auto;
+}
+.toast.show { transform: translateX(0); opacity: 1; }
+.toast.hide { transform: translateX(120%); opacity: 0; }
+.toast-icon { font-size: 1.3em; flex-shrink: 0; }
+.toast.t-live { border-left-color: var(--red); }
+.toast.t-done { border-left-color: #2ed573; }
+.toast.t-warn { border-left-color: #ff7f50; }
 
 .fav-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); z-index: 1200; align-items: center; justify-content: center; padding: 18px; }
 .fav-modal-backdrop.open { display: flex; animation: fadeIn 0.25s ease; }
@@ -528,6 +547,7 @@ body {
 </div>
 
 <div id="fav-hero"></div>
+<div id="toast-stack"></div>
 
 <section class="live-section" id="live-section" style="display:none;">
   <div class="live-section-header glass-surface">
@@ -536,7 +556,7 @@ body {
         <span class="live-rec-dot"></span>
         <span class="glitch-live" id="glitch-live" data-text="EN DIRECT">EN DIRECT</span>
       </span>
-      <span id="live-section-title-text" style="font-family:var(--font-d); letter-spacing:0.05em;">AUJOURD'HUI</span>
+      <span id="live-section-title-text" data-i18n="live_today" style="font-family:var(--font-d); letter-spacing:0.05em;">AUJOURD'HUI</span>
     </div>
     <div class="live-section-meta">
       <span id="live-last-update">—</span>
@@ -759,7 +779,12 @@ function getTeamResults(frTeam) {
     if (!opp || !opp.team) continue;
     const gf = parseInt(me.score), ga = parseInt(opp.score);
     if (isNaN(gf) || isNaN(ga)) continue;
-    out.push({ id: ev.id, opp: frName(opp.team.displayName), gf, ga, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', live: state === 'in', date: ev.date, slug: (ev.season && ev.season.slug) || 'group-stage' });
+    // Égalité au score en KO : départage aux tirs au but via competitor.winner
+    // (sinon un match gagné/perdu aux t.a.b. s'affichait en « nul » gris)
+    const result = gf > ga ? 'W' : gf < ga ? 'L' : (me.winner === true ? 'W' : opp.winner === true ? 'L' : 'D');
+    out.push({ id: ev.id, opp: frName(opp.team.displayName), gf, ga, result, live: state === 'in', date: ev.date,
+      so: me.shootoutScore != null ? me.shootoutScore : null, oso: opp.shootoutScore != null ? opp.shootoutScore : null,
+      slug: (ev.season && ev.season.slug) || 'group-stage' });
   }
   out.sort((a, b) => new Date(a.date) - new Date(b.date));
   return out;
@@ -1210,7 +1235,8 @@ function renderFavHero() {
   } else {
     const results = (typeof getTeamResults === 'function') ? getTeamResults(FAV) : [];
     const last = results && results[results.length - 1];
-    meta = last ? `${window.t('fav_last')} <b>${last.gf}–${last.ga}</b> vs ${escFav(last.opp)}` : window.t('fav_no_match');
+    // Match du favori EN COURS : afficher « EN DIRECT », pas « Dernier match »
+    meta = last ? `${last.live ? '🔴 ' + window.t('live_badge') + ' :' : window.t('fav_last')} <b>${last.gf}–${last.ga}</b> vs ${escFav(last.opp)}` : window.t('fav_no_match');
   }
   host.innerHTML = `
     <div class="fav-hero-card">
@@ -1368,18 +1394,43 @@ function getTeamNextKO(name) {
 
 // Statut tournoi d'une équipe : 'alive' (encore un match à jouer/en cours → en lice)
 // ou 'out' (tous ses matchs sont terminés → éliminée). null si données absentes.
+// Toast (même implémentation que CDM.html — était appelé ici sans jamais exister)
+function toast(msg, type = '', icon = '✓', duration = 2400) {
+  const stack = document.getElementById('toast-stack');
+  if (!stack) return;
+  const el = document.createElement('div');
+  el.className = 'toast' + (type ? ' t-' + type : '');
+  el.innerHTML = `<span class="toast-icon">${icon}</span><span>${msg}</span>`;
+  stack.appendChild(el);
+  requestAnimationFrame(() => el.classList.add('show'));
+  setTimeout(() => {
+    el.classList.remove('show');
+    el.classList.add('hide');
+    setTimeout(() => el.remove(), 400);
+  }, duration);
+}
+
 function teamStatus(name) {
   if (!_allEvents) return null;
-  let hasAny = false;
+  let hasAny = false, lastDone = null;
   for (const ev of _allEvents) {
     const c = ev.competitions && ev.competitions[0];
     if (!c) continue;
-    if (!(c.competitors || []).some(x => x.team && frName(x.team.displayName) === name)) continue;
+    const me = (c.competitors || []).find(x => x.team && frName(x.team.displayName) === name);
+    if (!me) continue;
     hasAny = true;
     const st = c.status && c.status.type && c.status.type.state;
     if (st === 'pre' || st === 'in') return 'alive'; // encore un match → en lice
+    if (st === 'post' && (!lastDone || new Date(ev.date) > new Date(lastDone.date))) {
+      lastDone = { date: ev.date, won: me.winner === true, slug: (ev.season && ev.season.slug) || '' };
+    }
   }
-  return hasAny ? 'out' : null;
+  if (!hasAny) return null;
+  // Vainqueur de son dernier match KO (hors finale/3e place) : encore en lice,
+  // même si ESPN n'a pas encore publié l'affiche du tour suivant.
+  if (lastDone && lastDone.won && lastDone.slug && lastDone.slug !== 'group-stage'
+      && lastDone.slug !== 'final' && lastDone.slug !== '3rd-place-match') return 'alive';
+  return 'out';
 }
 function setCardStatus(name) {
   const el = document.getElementById('pc-status');
@@ -1400,7 +1451,12 @@ function renderCountryResults(name) {
   if (results && results.length) {
     const grp = results.filter(r => r.slug === 'group-stage');
     const ko  = results.filter(r => r.slug && r.slug !== 'group-stage');
-    const chip = (r) => `<span class="pc-res-chip res-${r.result.toLowerCase()} ${r.live ? 'is-live' : ''}" title="${escapeHTML(name)} ${r.gf}–${r.ga} ${escapeHTML(r.opp)}"><img src="${flagUrl(r.opp, 40)}" alt="" onerror="this.style.display='none'"> ${r.gf}–${r.ga}</span>`;
+    const chip = (r) => {
+      const hasSO = r.so != null && r.oso != null;
+      const so = hasSO ? ` <small>(${r.so}–${r.oso})</small>` : '';
+      const soT = hasSO ? ` (${r.so}–${r.oso} ${window.t('shootout_abbr')})` : '';
+      return `<span class="pc-res-chip res-${r.result.toLowerCase()} ${r.live ? 'is-live' : ''}" title="${escapeHTML(name)} ${r.gf}–${r.ga}${soT} ${escapeHTML(r.opp)}"><img src="${flagUrl(r.opp, 40)}" alt="" onerror="this.style.display='none'"> ${r.gf}–${r.ga}${so}</span>`;
+    };
     const wdl = (arr) => {
       const w = arr.filter(r => r.result === 'W' && !r.live).length;
       const d = arr.filter(r => r.result === 'D' && !r.live).length;
