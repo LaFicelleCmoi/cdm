@@ -760,7 +760,7 @@ async function loadAllResults() {
     const open = document.querySelector('.pixel-card[data-country]');
     if (open) {
       renderCountryResults(open.dataset.country);
-      if (_pixelCtl) { _pixelCtl.build(); _pixelCtl.appear(); }
+      if (_pixelCtl) { _pixelCtl.build(); _pixelCtl.settle(); } // re-dimensionne sans re-animer
     }
   } catch (err) { console.warn('loadAllResults failed:', err); }
 }
@@ -1360,13 +1360,21 @@ function attachPixelCanvas(canvas, colors, { gap = 5, speed = 0.07 } = {}) {
     // « shimmer » infini et la boucle ne s'arrêtait JAMAIS → des milliers de
     // pixels redessinés 60×/s tant que la carte restait ouverte = page qui rame.
     // (survoler la carte relance brièvement l'effet, comme avant)
-    if (fn === 'appear' && ++frames > 160) { cancelAnimationFrame(raf); raf = null; }
+    if (fn === 'appear' && ++frames > 110) { cancelAnimationFrame(raf); raf = null; }
   }
   function stop() { if (raf) { cancelAnimationFrame(raf); raf = null; } }
 
+  // Dessine tous les pixels à leur taille finale, SANS boucle (figé → coût nul)
+  function drawStatic() { stop(); ctx.clearRect(0, 0, w, h); pixels.forEach(p => { p.size = p.maxSize; p.isIdle = true; p.draw(); }); }
+
   return {
-    appear() { stop(); frames = 0; pixels.forEach(p => { p.isIdle = false; }); loop('appear'); },
+    appear() {
+      stop(); frames = 0;
+      if (_reduceMotion) { drawStatic(); return; } // accessibilité : image figée
+      pixels.forEach(p => { p.isIdle = false; }); loop('appear');
+    },
     disappear() { stop(); loop('disappear'); },
+    settle: drawStatic,
     rebuild() { build(); },
     build
   };
@@ -1579,9 +1587,9 @@ function openCountryCard(name) {
   _pixelCtl = attachPixelCanvas(canvas, palette, { gap: 7, speed: 0.08 });
   _pixelCtl.build();   // synchrone : getBoundingClientRect force le layout → canvas dimensionné
   _pixelCtl.appear();  // reveal animé on open
-  // Re-trigger on hover (faithful to ReactBits behaviour)
-  card.addEventListener('mouseenter', () => _pixelCtl && _pixelCtl.appear());
-  card.addEventListener('mouseleave', () => _pixelCtl && _pixelCtl.disappear());
+  // Survol volontairement DÉSACTIVÉ : sur PC, mouseenter/mouseleave relançaient
+  // l'animation en boucle (le téléphone n'a pas de survol → il était déjà fluide).
+  // L'effet joue une fois à l'ouverture puis se fige (coût CPU nul ensuite).
 
   // Close on backdrop click / Escape
   backdrop.onclick = (e) => { if (e.target === backdrop) closeCountryCard(); };
