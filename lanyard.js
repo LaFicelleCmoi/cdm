@@ -19,19 +19,20 @@ import * as THREE from 'three';
   const REDUCE = !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
 
   // ---- Constantes du monde (unités Three arbitraires) --------------------
-  const SEG = 1.0;            // longueur d'un segment de corde
+  const SEG = 0.7;            // longueur d'un segment de corde (cordon court → badge haut)
   const N_ROPE = 4;           // points de corde : P0 (ancre) .. P3
-  const CLIP_GAP = 0.35;      // "joint sphérique" entre P3 et le haut du badge
-  const CARD_W = 2.0, CARD_H = 3.0;   // badge (ratio 2:3)
-  const ANCHOR_Y = 4.2;       // hauteur de l'ancre fixe
+  const CLIP_GAP = 0.3;       // "joint sphérique" entre P3 et le haut du badge
+  const CARD_W = 2.5, CARD_H = 3.75;  // badge AGRANDI (ratio 2:3)
+  const ANCHOR_Y = 4.0;       // hauteur de l'ancre fixe (= bord haut du stage)
   const GRAV = -19;           // gravité (u/s²)
   const DAMP = 0.955;         // amortissement verlet (settle ~3 s puis sommeil = 0 % CPU)
   const ITER = 6;             // itérations de contraintes / frame
   const DT = 1 / 60;
   const SLEEP_EPS = 0.0000045; // énergie cinétique sous laquelle on s'endort
   const SLEEP_FRAMES = 45;     // frames calmes consécutives avant sommeil
-  const FIT_HEIGHT = 8.6;      // hauteur monde visible (framing constant)
-  const LOOK_Y = 0.8;
+  const FIT_HEIGHT = 6.6;      // hauteur monde visible (badge plus gros à l'écran)
+  const LOOK_Y = 0.7;          // centre caméra : bord haut = LOOK_Y+FIT/2 = 4.0 = ANCHOR_Y
+                               // → l'ancre du cordon est pile au bord haut du stage
 
   let S = null;  // scène active (une seule à la fois)
   const _dragPlane = new THREE.Plane(new THREE.Vector3(0, 0, 1), 0); // scratch réutilisé
@@ -580,6 +581,6 @@ import * as THREE from 'three';
   }
 
   // ---- API + auto-init si le favori a été rendu avant ce module ----------
-  window.CDMLanyard = { mount, unmount };
+  window.CDMLanyard = { mount, unmount, _debug: () => S ? { active: S.active, calm: S.calm, awakeFrames: S.awakeFrames, dragging: S.dragging } : null };
   if (typeof window.syncLanyard === 'function') { try { window.syncLanyard(); } catch (_) {} }
 })();

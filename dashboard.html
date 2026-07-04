@@ -402,10 +402,12 @@ body {
 
 /* ===== Ma sélection favorite ===== */
 #fav-hero:empty { display: none; }
-.lanyard-stage { width: 100%; max-width: 1100px; height: 340px; margin: 0 auto -10px; touch-action: none; cursor: grab; }
+/* le badge pend SOUS le bandeau (barre favori) : z-index 1 < bandeau (2), et
+   marge haute négative → le cordon s'ancre juste sous la barre (relié par en dessous). */
+.lanyard-stage { position: relative; z-index: 1; width: 100%; max-width: 1100px; height: 430px; margin: -16px auto 8px; touch-action: none; cursor: grab; }
 .lanyard-stage canvas { display: block; }
-@media (max-width: 640px) { .lanyard-stage { height: 250px; } }
-.fav-hero-card { display: flex; align-items: center; gap: 18px; max-width: 1100px; margin: 0 auto 22px; padding: 16px 20px; background: linear-gradient(120deg, rgba(251,197,49,0.12), rgba(255,255,255,0.03)); border: 1px solid rgba(251,197,49,0.35); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+@media (max-width: 640px) { .lanyard-stage { height: 320px; margin-top: -10px; } }
+.fav-hero-card { position: relative; z-index: 2; display: flex; align-items: center; gap: 18px; max-width: 1100px; margin: 0 auto 0; padding: 16px 20px; background: linear-gradient(120deg, rgba(251,197,49,0.12), rgba(255,255,255,0.03)); border: 1px solid rgba(251,197,49,0.35); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
 .fav-hero-flag img { width: 64px; height: 44px; object-fit: cover; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,0.5); }
 .fav-hero-info { flex: 1; min-width: 0; }
 .fav-hero-label { font-size: 0.7em; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
@@ -1226,7 +1228,7 @@ function renderFavHero() {
   // chaque refresh live (sinon on fuit un contexte WebGL) → stage + carte séparés.
   let cardHost = document.getElementById('fav-hero-card-host');
   if (!cardHost) {
-    host.innerHTML = '<div id="lanyard-stage" class="lanyard-stage" aria-hidden="true"></div><div id="fav-hero-card-host"></div>';
+    host.innerHTML = '<div id="fav-hero-card-host"></div><div id="lanyard-stage" class="lanyard-stage" aria-hidden="true"></div>';
     cardHost = document.getElementById('fav-hero-card-host');
   }
   const _stage = document.getElementById('lanyard-stage');
