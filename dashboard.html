@@ -20,8 +20,13 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=18"></script>
+<script src="i18n.js?v=19"></script>
 <script src="events.js?v=3"></script>
+<!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module" src="lanyard.js?v=1"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -397,6 +402,9 @@ body {
 
 /* ===== Ma sélection favorite ===== */
 #fav-hero:empty { display: none; }
+.lanyard-stage { width: 100%; max-width: 1100px; height: 340px; margin: 0 auto -10px; touch-action: none; cursor: grab; }
+.lanyard-stage canvas { display: block; }
+@media (max-width: 640px) { .lanyard-stage { height: 250px; } }
 .fav-hero-card { display: flex; align-items: center; gap: 18px; max-width: 1100px; margin: 0 auto 22px; padding: 16px 20px; background: linear-gradient(120deg, rgba(251,197,49,0.12), rgba(255,255,255,0.03)); border: 1px solid rgba(251,197,49,0.35); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
 .fav-hero-flag img { width: 64px; height: 44px; object-fit: cover; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,0.5); }
 .fav-hero-info { flex: 1; min-width: 0; }
@@ -1214,7 +1222,16 @@ function getTeamNextMatch(fr) {
 function renderFavHero() {
   const host = document.getElementById('fav-hero');
   if (!host) return;
-  if (!FAV) { host.innerHTML = ''; return; }
+  // Structure persistante : le stage du Lanyard 3D ne doit PAS être recréé à
+  // chaque refresh live (sinon on fuit un contexte WebGL) → stage + carte séparés.
+  let cardHost = document.getElementById('fav-hero-card-host');
+  if (!cardHost) {
+    host.innerHTML = '<div id="lanyard-stage" class="lanyard-stage" aria-hidden="true"></div><div id="fav-hero-card-host"></div>';
+    cardHost = document.getElementById('fav-hero-card-host');
+  }
+  const _stage = document.getElementById('lanyard-stage');
+  if (!FAV) { cardHost.innerHTML = ''; if (_stage) _stage.style.display = 'none'; if (window.CDMLanyard) window.CDMLanyard.unmount(); return; }
+  if (_stage) _stage.style.display = '';
   const g = groupOf(FAV) || '?';
   let meta = '', phaseHtml = '';
   // Phase d'une rencontre via le season.slug ESPN
@@ -1243,7 +1260,7 @@ function renderFavHero() {
     // Match du favori EN COURS : afficher « EN DIRECT », pas « Dernier match »
     meta = last ? `${last.live ? '🔴 ' + window.t('live_badge') + ' :' : window.t('fav_last')} <b>${last.gf}–${last.ga}</b> vs ${escFav(last.opp)}` : window.t('fav_no_match');
   }
-  host.innerHTML = `
+  cardHost.innerHTML = `
     <div class="fav-hero-card">
       <div class="fav-hero-flag"><img src="${flagUrl(FAV, 160)}" alt="${escFav(FAV)}" onerror="this.style.display='none'"></div>
       <div class="fav-hero-info">
@@ -1257,6 +1274,26 @@ function renderFavHero() {
         <button class="fav-change" onclick="openFavModal()">${window.t('fav_change')}</button>
       </div>
     </div>`;
+  syncLanyard();
+}
+
+// Monte / démonte le Lanyard 3D du favori (badge d'accréditation qui pend).
+// Appelé par renderFavHero et par lanyard.js quand le module finit de charger.
+function syncLanyard() {
+  if (!window.CDMLanyard) return; // module Three.js pas encore prêt (il rappellera)
+  const stage = document.getElementById('lanyard-stage');
+  if (!stage || !FAV) { window.CDMLanyard.unmount(); return; }
+  const lang = (window.getLang && window.getLang()) || 'fr';
+  window.CDMLanyard.mount(stage, {
+    key: FAV + '|' + lang,               // rebuild si le pays OU la langue change
+    country: FAV, iso: ISO[FAV] || '', group: groupOf(FAV) || '',
+    flag: flagUrl(FAV, 320),
+    compLabel: window.t('lanyard_comp'),
+    roleLabel: window.t('lanyard_role'),
+    groupLabel: window.t('fav_group'),
+    serial: 'FWC-' + (ISO[FAV] || 'XX').toUpperCase() + '-26',
+    onClick: () => openCountryCard(FAV)
+  });
 }
 const escFav = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 
