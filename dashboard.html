@@ -432,10 +432,16 @@ body {
 .lanyard-stage { position: relative; z-index: 1; width: 100%; max-width: 1100px; height: 430px; margin: -16px auto 8px; touch-action: none; cursor: grab; }
 .lanyard-stage canvas { display: block; }
 @media (max-width: 640px) { .lanyard-stage { height: 320px; margin-top: -10px; } }
-.fav-hero-card { position: relative; z-index: 2; display: flex; align-items: center; gap: 18px; max-width: 1100px; margin: 0 auto 0; padding: 16px 20px; background: linear-gradient(120deg, rgba(251,197,49,0.12), rgba(255,255,255,0.03)); border: 1px solid rgba(251,197,49,0.35); border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.35); }
+/* Le bandeau prend les COULEURS de la sélection (team.color ESPN, posées en
+   variables --fav-c1/--fav-c2/--fav-accent par renderFavHero) ; repli doré. */
+.fav-hero-card { position: relative; z-index: 2; display: flex; align-items: center; gap: 18px; max-width: 1100px; margin: 0 auto 0; padding: 16px 20px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--fav-c1, #fbc531) 16%, transparent), rgba(255,255,255,0.03) 52%, color-mix(in srgb, var(--fav-c2, #fbc531) 10%, transparent));
+  border: 1px solid color-mix(in srgb, var(--fav-accent, #fbc531) 42%, transparent);
+  border-radius: 16px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.35), 0 0 26px -10px color-mix(in srgb, var(--fav-accent, #fbc531) 60%, transparent); }
 .fav-hero-flag img { width: 64px; height: 44px; object-fit: cover; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,0.5); }
 .fav-hero-info { flex: 1; min-width: 0; }
-.fav-hero-label { font-size: 0.7em; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); }
+.fav-hero-label { font-size: 0.7em; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fav-accent, var(--gold)); }
 .fav-hero-name { font-family: var(--font-d); font-size: 1.8em; line-height: 1; color: #fff; margin: 2px 0 4px; }
 .fav-hero-meta { font-size: 0.85em; color: #c8d2dd; }
 .fav-hero-meta b { color: #fff; }
@@ -1276,6 +1282,26 @@ function getTeamNextMatch(fr) {
   return up[0] || null;
 }
 
+// Couleurs officielles ESPN de la sélection (team.color / alternateColor).
+// Accent = la plus lumineuse des deux, éclaircie si trop sombre (lisibilité).
+const _teamColorCache = {};
+function teamColorsOf(fr) {
+  if (_teamColorCache[fr]) return _teamColorCache[fr];
+  let c1 = null, c2 = null;
+  if (_allEvents) {
+    for (const ev of _allEvents) {
+      const cs = ev.competitions[0].competitors || [];
+      const me = cs.find(c => c.team && frName(c.team.displayName) === fr);
+      if (me && me.team.color) { c1 = '#' + me.team.color; c2 = me.team.alternateColor ? '#' + me.team.alternateColor : null; break; }
+    }
+  }
+  if (!c1) return null; // pas encore de données → on retentera au prochain render
+  const luma = (h) => { const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255); };
+  let acc = (c2 && luma(c2) > luma(c1)) ? c2 : c1;
+  if (luma(acc) < 95) { const n = parseInt(acc.slice(1), 16); const L = (x) => Math.round(x + (255 - x) * 0.5); acc = 'rgb(' + L(n >> 16 & 255) + ',' + L(n >> 8 & 255) + ',' + L(n & 255) + ')'; }
+  return (_teamColorCache[fr] = { c1, c2, accent: acc });
+}
+
 function renderFavHero() {
   const host = document.getElementById('fav-hero');
   if (!host) return;
@@ -1331,6 +1357,14 @@ function renderFavHero() {
         <button class="fav-change" onclick="openFavModal()">${window.t('fav_change')}</button>
       </div>
     </div>`;
+  // teinte le bandeau aux couleurs de la sélection (repli doré si pas encore de données)
+  const tc = teamColorsOf(FAV);
+  const cardEl = cardHost.querySelector('.fav-hero-card');
+  if (cardEl && tc) {
+    cardEl.style.setProperty('--fav-c1', tc.c1);
+    if (tc.c2) cardEl.style.setProperty('--fav-c2', tc.c2);
+    cardEl.style.setProperty('--fav-accent', tc.accent);
+  }
   syncLanyard();
 }
 
