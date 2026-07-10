@@ -451,10 +451,16 @@ body {
 .fav-hero-actions .fav-change:hover { color: #fff; border-color: rgba(255,255,255,0.4); }
 @media (max-width: 640px) { .fav-hero-card { flex-wrap: wrap; } .fav-hero-actions { flex-direction: row; width: 100%; } .fav-hero-actions button { flex: 1; } }
 
-.live-card.fav-match { border-color: rgba(251,197,49,0.6) !important; box-shadow: 0 0 0 1px rgba(251,197,49,0.4), 0 10px 30px rgba(0,0,0,0.45); }
+/* Match de la sélection favorite : traitement APPUYÉ (bordure vive + halo doré +
+   lueur interne chaude) — tout statique, aucun coût par frame. */
+.live-card.fav-match { border-color: rgba(251,197,49,0.8) !important; box-shadow: 0 0 0 1px rgba(251,197,49,0.55), 0 0 28px -6px rgba(251,197,49,0.5), inset 0 0 46px -20px rgba(251,197,49,0.35), 0 10px 30px rgba(0,0,0,0.45); }
+.live-team-row.is-fav-team .live-team-name { color: var(--gold); font-weight: 800; }
+.live-team-row.is-fav-team .live-team-name::before { content: '★ '; font-size: 0.85em; }
 /* inset:auto + background:none + opacity:1 : annule l'héritage du glow .live-card::after
    (sans quoi l'étoile héritait opacity:0 + fond radial et n'apparaissait qu'au survol) */
-.live-card.fav-match::after { content: '★'; position: absolute; inset: auto; top: 8px; right: 10px; background: none; opacity: 1; color: var(--gold); font-size: 0.9em; z-index: 3; }
+/* Ruban « ★ TA SÉLECTION » accroché au bord haut de la carte (texte localisé via
+   data-fav-label, posé par buildLiveCard) */
+.live-card.fav-match::after { content: attr(data-fav-label); position: absolute; inset: auto; top: -1px; right: 14px; background: linear-gradient(180deg, #fbc531, #dfa500); opacity: 1; color: #10202f; font-size: 0.56em; font-weight: 900; letter-spacing: 0.09em; text-transform: uppercase; padding: 4px 10px 5px; border-radius: 0 0 9px 9px; box-shadow: 0 4px 12px rgba(0,0,0,0.4); z-index: 3; }
 
 /* Toasts (portés de CDM.html : la fonction toast() était appelée mais jamais définie ici) */
 #toast-stack { position: fixed; top: 20px; right: 20px; z-index: 1300; display: flex; flex-direction: column; gap: 10px; pointer-events: none; }
@@ -1037,8 +1043,11 @@ function buildLiveCard(ev, idx, sizeClass) {
   const away = competitors.find(c => c.homeAway === 'away') || competitors[1];
 
   const card = document.createElement('div');
-  const isFav = typeof FAV !== 'undefined' && FAV && [home, away].some(c => c && c.team && frName(c.team.displayName) === FAV);
+  const isFavOf = (c) => typeof FAV !== 'undefined' && FAV && c && c.team && frName(c.team.displayName) === FAV;
+  const homeFav = isFavOf(home), awayFav = isFavOf(away);
+  const isFav = homeFav || awayFav;
   card.className = `live-card state-${state} ${sizeClass || 'size-wide'}${isFav ? ' fav-match' : ''}`;
+  if (isFav) card.dataset.favLabel = '★ ' + window.t('fav_label'); // texte du ruban (localisé)
   card.style.animationDelay = (0.05 + idx * 0.05) + 's';
   card.dataset.eventId = ev.id;
 
@@ -1068,12 +1077,12 @@ function buildLiveCard(ev, idx, sizeClass) {
       </div>
     </div>
     <div class="live-card-teams">
-      <div class="live-team-row ${homeWinner ? 'winner' : ''}">
+      <div class="live-team-row ${homeWinner ? 'winner' : ''}${homeFav ? ' is-fav-team' : ''}">
         ${teamLogoTag(home)}
         <span class="live-team-name">${escapeHTML(frName(home ? home.team.displayName : '—'))}</span>
         <span class="live-team-score${state === 'pre' ? ' is-pre' : ''}" data-side="home">${state === 'pre' ? '' : homeScore}</span>
       </div>
-      <div class="live-team-row ${awayWinner ? 'winner' : ''}">
+      <div class="live-team-row ${awayWinner ? 'winner' : ''}${awayFav ? ' is-fav-team' : ''}">
         ${teamLogoTag(away)}
         <span class="live-team-name">${escapeHTML(frName(away ? away.team.displayName : '—'))}</span>
         <span class="live-team-score${state === 'pre' ? ' is-pre' : ''}" data-side="away">${state === 'pre' ? '' : awayScore}</span>
