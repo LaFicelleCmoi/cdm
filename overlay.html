@@ -150,7 +150,9 @@
   const TEAM = (P.get('team') || '').trim().toLowerCase();
   const SCALE = Math.min(3, Math.max(0.5, parseFloat(P.get('scale')) || 1));
   const HIDE_EMPTY = P.get('hideEmpty') === '1';
-  const REFRESH_MS = 15000;   // rafraîchissement scores
+  // Poll ADAPTATIF : 7 s pendant un match en direct (les résultats tombent vite),
+  // 10 s quand un coup d'envoi approche (<15 min), 45 s au repos.
+  const REFRESH_LIVE = 7000, REFRESH_SOON = 10000, REFRESH_IDLE = 45000;
   const ROTATE_MS = 10000;    // rotation entre matchs en direct
 
   const bug = document.getElementById('bug');
@@ -228,6 +230,36 @@
     } catch (e) { return (c && c.list) || []; }
   }
 
+  // Événements depuis competitions[0].details du SCOREBOARD (réponse déjà en main) :
+  // ZÉRO requête et ZÉRO retard — l'endpoint summary, lui, traîne derrière le score.
+  // (C'est la même source que le tracker de tirs au but.)
+  function listFromDetails(ev) {
+    const comp = ev.competitions[0];
+    const dets = comp.details || [];
+    if (!dets.length) return null;                    // pas fourni → repli summary
+    const byId = {};
+    (comp.competitors || []).forEach(c => { if (c.team) byId[c.team.id] = c.team.displayName; });
+    const out = [];
+    for (const d of dets) {
+      if (d.shootout) continue;                       // la séance a son tracker dédié
+      let kind = evKind((d.type && d.type.text) || '');
+      // les drapeaux booléens du scoreboard sont plus fiables que le libellé
+      if (d.ownGoal) kind = 'owngoal';
+      else if (d.penaltyKick) kind = d.scoringPlay ? 'pen' : 'penmiss';
+      else if (d.redCard) kind = 'red';
+      else if (d.yellowCard) kind = 'yellow';
+      else if (d.scoringPlay && kind === 'other') kind = 'goal';
+      if (!FEED_EMOJI[kind]) continue;
+      out.push({
+        kind,
+        clock: (d.clock || {}).displayValue || '',
+        player: ((d.athletesInvolved || [])[0] || {}).displayName || '',
+        team: (d.team && byId[d.team.id]) || '',
+      });
+    }
+    return out;
+  }
+
   // === Célébration de but « BUT ! » (carte animée teintée à la nation marqueuse) ===
   const GOAL_KINDS = ['goal', 'pen', 'freekick', 'owngoal'];
   const GoalCele = (() => {
@@ -266,7 +298,7 @@
   // Prévisualisation : taper goalCeleDemo() dans la console (ou OBS → Interagir).
   window.goalCeleDemo = (o) => GoalCele.show(Object.assign({ abbr: 'NOR', color: 'ba0c2f', logo: 'https://a.espncdn.com/i/teamlogos/countries/500/nor.png', scorer: 'Haaland', minute: "86'", homeAbbr: 'CIV', awayAbbr: 'NOR', hs: 1, as: 2 }, o || {}));
   // Récupère le buteur + la minute via les événements du match, puis affiche la carte.
-  async function celebrateGoal(scorerComp, hs, as, homeAbbr, awayAbbr, evId) {
+  async function celebrateGoal(scorerComp, hs, as, homeAbbr, awayAbbr, ev) {
     const team = (scorerComp && scorerComp.team) || {};
     let scorer = '', minute = '';
     try {
@@ -277,9 +309,12 @@
           (e.kind === 'owngoal' ? e.team !== team.displayName : e.team === team.displayName));
         return mine[mine.length - 1];
       };
-      // force=true : le but vient d'arriver, le cache 20 s serait périmé
-      let g = pick(await fetchEv(evId, true));
-      if (!g) { await new Promise(r => setTimeout(r, 4000)); g = pick(await fetchEv(evId, true)); } // le summary peut retarder sur le scoreboard
+      // 1) IMMÉDIAT : details du scoreboard — le score vient d'y bouger, le buteur
+      //    y est déjà (fini l'attente du summary + la relance à 4 s systématique)
+      let g = pick(listFromDetails(ev) || []);
+      // 2) repli : summary forcé (cache court-circuité), avec une relance
+      if (!g) g = pick(await fetchEv(ev.id, true));
+      if (!g) { await new Promise(r => setTimeout(r, 4000)); g = pick(await fetchEv(ev.id, true)); } // le summary peut retarder sur le scoreboard
       if (g) { scorer = lastName(g.player); minute = g.clock; }
     } catch (e) {}
     GoalCele.show({
@@ -417,7 +452,12 @@
     const f = bug.querySelector('.sb-feed');
     const state = ev && ev.competitions[0].status.type.state;
     if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); _feedCur = null; return; }
-    const list = await fetchEv(ev.id);
+    // 1) source IMMÉDIATE : details du scoreboard déjà en main (aucun retard) ;
+    // 2) summary en ARRIÈRE-PLAN (pause fraîcheur + repli si details absent) —
+    //    il ne bloque plus jamais l'affichage des résultats.
+    let list = listFromDetails(ev);
+    const bg = fetchEv(ev.id);
+    if (!list) list = await bg;
     // Rotation multi-matchs : si le scorebug a changé de match pendant l'await,
     // ne pas peindre les événements/cartons du match A sous le scorebug du match B.
     const curCard = bug.querySelector('.scorebug');
@@ -452,6 +492,7 @@
     // purge le cache summary des matchs plus affichés (overlay OBS allumé des heures)
     const nowMs = Date.now();
     for (const id in evCache) { if (evCache[id] && nowMs - evCache[id].ts > 600000) delete evCache[id]; }
+    for (const k in _feedSeen) { if (nowMs - _feedSeen[k] > 600000) delete _feedSeen[k]; } // l'overlay tourne des heures
     if (!_feedCur) return;
     const f = bug.querySelector('.sb-feed');
     if (!f || !f.classList.contains('list')) return; // épargne l'encart « pause fraîcheur »
@@ -522,7 +563,7 @@
       if (sides.length) {
         card.classList.remove('goal'); void card.offsetWidth; card.classList.add('goal');
         card.querySelectorAll('.v').forEach(v => { v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump'); });
-        sides.forEach(side => celebrateGoal(side === 'home' ? home : away, hs, as, abbr(home), abbr(away), ev.id)); // carte « BUT ! »
+        sides.forEach(side => celebrateGoal(side === 'home' ? home : away, hs, as, abbr(home), abbr(away), ev)); // carte « BUT ! »
       }
     }
     lastScore[ev.id] = key;
@@ -542,6 +583,7 @@
       if (live.length > 1 && !TEAM) {
         rotateTimer = setInterval(() => { try { rotateIdx = (rotateIdx + 1) % live.length; render(live[rotateIdx]); } catch (e) {} }, ROTATE_MS);
       }
+      schedulePoll(REFRESH_LIVE);   // match en cours → 7 s (résultats quasi temps réel)
       return;
     }
     // pas de live → prochain match (ou dernier terminé si team épinglée), sinon rien
@@ -551,6 +593,9 @@
     const upcoming = rest.find(e => e.competitions[0].status.type.state === 'pre');
     const lastPost = [...rest].reverse().find(e => e.competitions[0].status.type.state === 'post');
     render(upcoming || (TEAM ? lastPost : null) || null);
+    // coup d'envoi < 15 min → 10 s (attraper le 0' au plus tôt), sinon 45 s
+    const soon = upcoming && (new Date(upcoming.date) - Date.now()) < 15 * 60000;
+    schedulePoll(soon ? REFRESH_SOON : REFRESH_IDLE);
   }
 
   async function tick() {
@@ -562,8 +607,19 @@
     } catch (e) { /* garde le dernier affichage */ }
   }
 
+  // planification adaptative (remplace l'intervalle fixe de 15 s)
+  let pollTimer = null, pollMs = 0;
+  function schedulePoll(ms) {
+    if (ms === pollMs) return;
+    pollMs = ms;
+    if (pollTimer) clearInterval(pollTimer);
+    pollTimer = setInterval(tick, ms);
+  }
+  // onglet/scène qui redevient visible → resynchronise tout de suite
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
+
   tick();
-  setInterval(tick, REFRESH_MS);
+  schedulePoll(REFRESH_IDLE); // ajusté dès la 1re réponse (live → 7 s)
 })();
 </script>
 </body>
