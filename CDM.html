@@ -825,7 +825,14 @@ window.addEventListener('click', (e) => {
   }
 
   function draw() {
+    // Efface TOUT le canvas indépendamment du transform : le contexte est mis à
+    // l'échelle par dpr, donc clearRect(0,0,canvas.width,…) n'effaçait qu'une
+    // partie quand dpr < 1 (zoom navigateur < 100 %) → traînées de points
+    // jamais nettoyées sur les bords droit/bas.
+    ctx.save();
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.restore();
     let moving = false;
     for (const dot of dots) {
       dot.vx += (0 - dot.xOffset) * tension; dot.vy += (0 - dot.yOffset) * tension;
