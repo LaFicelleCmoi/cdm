@@ -165,9 +165,11 @@ body {
 
 .live-card-status { display: flex; align-items: center; justify-content: space-between; font-size: 0.7em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .live-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 0.95em; }
-.live-status-pill.state-in { background: rgba(255,71,87,0.15); color: var(--red); border: 1px solid rgba(255,71,87,0.4); }
-.live-status-pill.state-pre { background: rgba(251,197,49,0.12); color: var(--gold); border: 1px solid rgba(251,197,49,0.3); }
-.live-status-pill.state-post { background: rgba(46,213,115,0.12); color: var(--green, #2ed573); border: 1px solid rgba(46,213,115,0.3); }
+/* pastilles de statut SANS contour dur (le liseré rouge « en cours » faisait un
+   rectangle cassé à petite échelle) : fond teinté + texte coloré + léger relief interne */
+.live-status-pill.state-in { background: rgba(255,71,87,0.16); color: var(--red); box-shadow: inset 0 0 0 1px rgba(255,71,87,0.12); }
+.live-status-pill.state-pre { background: rgba(251,197,49,0.13); color: var(--gold); box-shadow: inset 0 0 0 1px rgba(251,197,49,0.1); }
+.live-status-pill.state-post { background: rgba(46,213,115,0.13); color: var(--green, #2ed573); box-shadow: inset 0 0 0 1px rgba(46,213,115,0.1); }
 .live-dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .live-card.state-in .live-dot { animation: pulse 1.2s infinite; }
 .live-card-clock { font-family: var(--font-d); font-size: 1em; color: var(--white); letter-spacing: 0.05em; }
