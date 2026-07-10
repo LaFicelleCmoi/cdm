@@ -201,20 +201,20 @@ body {
     repeating-linear-gradient(90deg, rgba(255,255,255,0.028) 0 6px, transparent 6px 12px),
     linear-gradient(180deg, rgba(255,255,255,0.07), transparent 42%),
     linear-gradient(180deg, #14351f, #0a2013 58%, #061409);
-  border: 1px solid rgba(251,197,49,0.38); border-radius: 0.16em;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -8px 14px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.4);
-  transition: color 0.3s, transform 0.3s, box-shadow 0.3s, border-color 0.3s;
+  border: none; border-radius: 0.16em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.16), inset 0 -8px 14px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.4);
+  transition: color 0.3s, transform 0.3s, box-shadow 0.3s;
   font-variant-numeric: tabular-nums;
   text-shadow: 0 2px 6px rgba(0,0,0,0.6);
 }
 .live-team-score::after { content: ''; position: absolute; top: 0; left: -34%; width: 58%; height: 100%;
   background: linear-gradient(105deg, transparent, rgba(255,255,255,0.10) 45%, transparent 72%); pointer-events: none; }
 /* à venir : capsule invisible (le badge VS prend la scène) */
-.live-team-score.is-pre { background: none; border-color: transparent; box-shadow: none; }
+.live-team-score.is-pre { background: none; box-shadow: none; }
 .live-team-score.is-pre::after { display: none; }
-/* EN DIRECT : cerclage rouge + lueur (statique) */
-.live-card.state-in .live-team-score { color: #fff; border-color: rgba(255,71,87,0.6);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.2), inset 0 -8px 14px rgba(0,0,0,0.4), 0 0 20px -3px rgba(255,71,87,0.55), 0 4px 12px rgba(0,0,0,0.4); }
+/* EN DIRECT : halo rouge doux (sans contour) */
+.live-card.state-in .live-team-score { color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -8px 14px rgba(0,0,0,0.4), 0 0 18px -4px rgba(255,71,87,0.5), 0 4px 12px rgba(0,0,0,0.4); }
 /* TERMINÉ : vainqueur = capsule OR MÉTALLIQUE, texte or gravé ; perdant estompé */
 .live-card.state-post .live-team-score { color: #e8eef4; }
 .live-card.state-post .live-team-row.winner .live-team-score {
@@ -223,7 +223,6 @@ body {
     repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 6px, transparent 6px 12px),
     linear-gradient(180deg, rgba(251,197,49,0.30), rgba(122,86,12,0.30) 58%, rgba(10,20,8,0.5)),
     linear-gradient(180deg, #14351f, #081f12 60%, #061409);
-  border-color: rgba(251,197,49,0.7);
   box-shadow: inset 0 1px 0 rgba(255,233,150,0.55), inset 0 -8px 14px rgba(0,0,0,0.38), 0 0 22px -4px rgba(251,197,49,0.6), 0 4px 12px rgba(0,0,0,0.4); }
 .live-card.state-post .live-card-teams:has(.winner) .live-team-row:not(.winner) { opacity: 0.55; }
 .live-card.state-post .live-card-teams:has(.winner) .live-team-row:not(.winner) .live-team-score { filter: saturate(0.6); }
