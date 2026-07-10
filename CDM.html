@@ -23,7 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=23"></script>
+<script src="i18n.js?v=24"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -497,12 +497,16 @@ body::before {
 .fr-mm-so { font-family: var(--font-b); font-size: 0.55em; color: var(--muted); }
 .fr-mm-date { color: var(--muted); font-size: 0.7em; margin-top: 2px; }
 .fr-mm.live .fr-mm-score { color: var(--live, #ff4757); }
-.fr-spark-wrap { background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 12px 14px 8px; margin-bottom: 16px; }
+.fr-spark-wrap { position: relative; background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 12px 14px 8px; margin-bottom: 16px; }
 .fr-spark-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
 .fr-spark-label { font-size: 0.66em; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .fr-spark-delta { font-family: var(--font-b); font-weight: 800; font-size: 0.85em; white-space: nowrap; }
-.fr-spark { width: 100%; height: 62px; display: block; }
+.fr-spark { width: 100%; height: 62px; display: block; cursor: crosshair; touch-action: none; }
 .fr-spark-axis { display: flex; justify-content: space-between; font-size: 0.62em; color: var(--muted); margin-top: 3px; }
+.fr-spark-tip { position: absolute; pointer-events: none; z-index: 2; background: #0b1b12; border: 1px solid rgba(255,255,255,0.18); border-radius: 8px; padding: 6px 9px; font-size: 0.72em; line-height: 1.35; color: #fff; box-shadow: 0 6px 20px rgba(0,0,0,0.6); white-space: nowrap; }
+.fr-spark-tip b { display: block; font-weight: 700; }
+.fr-spark-tip span { color: var(--gold); font-weight: 800; }
+.fr-spark-tip i { color: var(--muted); font-style: normal; }
 @media (max-width: 640px) {
   .fr-colhead, .fr-row { grid-template-columns: 60px 1fr 66px; }
   .fr-match, .fr-colhead .c-match { display: none; }
@@ -2940,8 +2944,9 @@ document.addEventListener('langchange', () => {
       let wA, wB;
       if (soA != null && soB != null) { if (soA > soB) { wA = 0.75; wB = 0.5; } else { wA = 0.5; wB = 0.75; } }
       else if (sA > sB) { wA = 1; wB = 0; } else if (sA < sB) { wA = 0; wB = 1; } else { wA = 0.5; wB = 0.5; }
-      if (frA in pts) { pts[frA] = pA + I * (wA - We(pA, pB)); traj[frA].push({ date: e.date, pts: pts[frA] }); }
-      if (frB in pts) { pts[frB] = pB + I * (wB - We(pB, pA)); traj[frB].push({ date: e.date, pts: pts[frB] }); }
+      const _slug = (e.season && e.season.slug);
+      if (frA in pts) { pts[frA] = pA + I * (wA - We(pA, pB)); traj[frA].push({ date: e.date, pts: pts[frA], opp: frB, gf: sA, ga: sB, soF: soA, soAg: soB, slug: _slug }); }
+      if (frB in pts) { pts[frB] = pB + I * (wB - We(pB, pA)); traj[frB].push({ date: e.date, pts: pts[frB], opp: frA, gf: sB, ga: sA, soF: soB, soAg: soA, slug: _slug }); }
     }
     const list = Object.keys(PTS0).map(fr => ({ fr, iso: ISO[fr], pts: pts[fr], rank0: RANK0[fr] }))
       .sort((a, b) => b.pts - a.pts);
@@ -3105,12 +3110,57 @@ document.addEventListener('langchange', () => {
     return '<div class="fr-spark-wrap">'
       + '<div class="fr-spark-top"><span class="fr-spark-label">' + t('ranking_evolution') + '</span>'
       + '<span class="fr-spark-delta" style="color:' + col + '">' + (gained ? '▲' : '▼') + ' ' + deltaTxt + ' pts</span></div>'
-      + '<svg class="fr-spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">'
+      + '<svg class="fr-spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">'
+      + '<rect class="fr-spark-hit" x="0" y="0" width="' + W + '" height="' + H + '" fill="transparent"/>'
       + '<line x1="' + pad + '" x2="' + (W - pad) + '" y1="' + baseY + '" y2="' + baseY + '" stroke="rgba(255,255,255,0.22)" stroke-width="1" stroke-dasharray="4 4"/>'
       + '<polygon points="' + area + '" fill="' + col + '" fill-opacity="0.13"/>'
       + '<polyline points="' + line + '" fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>'
-      + dots + '</svg>'
+      + dots
+      + '<g class="fr-spark-cursor" style="display:none">'
+      + '<line class="fr-spark-cline" y1="' + pad + '" y2="' + (H - pad) + '" stroke="rgba(255,255,255,0.55)" stroke-width="1" stroke-dasharray="3 3"/>'
+      + '<circle class="fr-spark-cdot" r="3.4" fill="#fff" stroke="' + col + '" stroke-width="2"/></g>'
+      + '</svg>'
+      + '<div class="fr-spark-tip" style="display:none"></div>'
       + '<div class="fr-spark-axis"><span>' + base.toFixed(0) + '</span><span>' + cur.toFixed(0) + '</span></div></div>';
+  }
+  // survol du graphique → accroche le point le plus proche + bulle (tour · adv · pts)
+  function wireSparkline(fr) {
+    const svg = document.querySelector('#fr-modal-bd .fr-spark'); if (!svg) return;
+    const tr = _lastTraj[fr]; if (!tr || tr.length < 2) return;
+    const wrap = svg.closest('.fr-spark-wrap');
+    const tip = wrap.querySelector('.fr-spark-tip');
+    const cursor = svg.querySelector('.fr-spark-cursor');
+    const cLine = svg.querySelector('.fr-spark-cline'), cDot = svg.querySelector('.fr-spark-cdot');
+    const t = (k) => (window.t ? window.t(k) : k);
+    const W = 340, H = 62, pad = 7, n = tr.length;
+    const vals = tr.map(p => p.pts), min = Math.min.apply(null, vals), max = Math.max.apply(null, vals), range = (max - min) || 1;
+    const Xv = i => pad + (i / (n - 1)) * (W - 2 * pad);
+    const Yv = v => pad + (1 - (v - min) / range) * (H - 2 * pad);
+    function show(clientX) {
+      const r = svg.getBoundingClientRect(), wr = wrap.getBoundingClientRect();
+      let i = Math.round((((clientX - r.left) / r.width * W - pad) / (W - 2 * pad)) * (n - 1));
+      i = Math.max(0, Math.min(n - 1, i));
+      const p = tr[i], vx = Xv(i), vy = Yv(p.pts);
+      cLine.setAttribute('x1', vx); cLine.setAttribute('x2', vx);
+      cDot.setAttribute('cx', vx); cDot.setAttribute('cy', vy);
+      cursor.style.display = '';
+      if (i === 0 || !p.date) tip.innerHTML = '<b>' + t('ranking_base') + '</b><span>' + p.pts.toFixed(2) + ' pts</span>';
+      else {
+        const stage = (p.slug && STAGE[p.slug]) ? t(STAGE[p.slug]) + ' · ' : '';
+        const sc = (p.soF != null && p.soAg != null) ? (p.gf + '–' + p.ga + ' <i>(' + p.soF + '-' + p.soAg + ')</i>') : (p.gf + '–' + p.ga);
+        tip.innerHTML = '<b>' + stage + 'vs ' + esc(p.opp) + ' ' + sc + '</b><span>' + p.pts.toFixed(2) + ' pts</span>';
+      }
+      tip.style.display = 'block';
+      const sx = (r.left - wr.left) + (vx / W) * r.width, sy = (r.top - wr.top) + (vy / H) * r.height;
+      let left = sx - tip.offsetWidth / 2;
+      left = Math.max(2, Math.min(wrap.clientWidth - tip.offsetWidth - 2, left));
+      tip.style.left = left + 'px';
+      tip.style.top = Math.max(-4, sy - tip.offsetHeight - 9) + 'px';
+    }
+    function hide() { cursor.style.display = 'none'; tip.style.display = 'none'; }
+    svg.addEventListener('pointermove', e => show(e.clientX));
+    svg.addEventListener('pointerdown', e => show(e.clientX));
+    svg.addEventListener('pointerleave', hide);
   }
   function openTeamModal(fr, row) {
     if (!fr) return;
@@ -3145,6 +3195,7 @@ document.addEventListener('langchange', () => {
       + '<div class="fr-modal-listtitle">' + t('ranking_last5') + '</div>'
       + '<div class="fr-modal-list">' + listHtml + '</div>';
     bd.classList.add('open');
+    wireSparkline(fr);   // interactivité du graphique (survol des points)
   }
 
   // changement de langue → reconstruit la coquille (libellés) en gardant la recherche
