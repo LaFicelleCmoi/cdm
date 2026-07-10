@@ -24,8 +24,9 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=19"></script>
+<script src="i18n.js?v=25"></script>
 <script src="events.js?v=3"></script>
+<script src="fifa-ranking.js?v=1"></script>
 <!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
@@ -360,6 +361,7 @@ body {
    GROUPS OVERVIEW — aperçu des 12 groupes (remplit le dashboard)
    ========================================================= */
 .groups-overview { max-width: 1200px; margin: 40px auto 10px; }
+.fifa-rank-section { max-width: 1200px; margin: 40px auto 10px; padding: 0 0 6px; }
 .go-section-title { font-family: var(--font-d); font-size: 1.8em; letter-spacing: 0.05em; color: #fff; margin-bottom: 16px; }
 .groups-overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .go-card { background: rgba(15,25,35,0.7); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; backdrop-filter: blur(8px); transition: border-color 0.2s, transform 0.2s; }
@@ -586,6 +588,11 @@ body {
   <div class="groups-overview-grid" id="groups-overview-grid"></div>
 </section>
 
+<section class="fifa-rank-section">
+  <div class="go-section-title">🌍 <span data-i18n="ranking_title">Classement mondial FIFA</span></div>
+  <div id="fifa-ranking-dash"></div>
+</section>
+
 <section class="flag-loop-section">
   <div class="flag-loop-label" data-i18n="flag_loop_label">⚽ Les 48 nations · clique sur un drapeau</div>
   <div class="flag-loop">
@@ -767,6 +774,7 @@ async function loadAllResults() {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     _allEvents = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
+    if (window.updateFifaRanking) window.updateFifaRanking(_allEvents); // classement FIFA en direct
     if (typeof renderFavHero === 'function') renderFavHero(); // prochain match du favori dispo
 
     // si une carte pays est ouverte, on rafraîchit son parcours (+ on re-dimensionne le canvas pixel)
@@ -820,6 +828,7 @@ const teamNameEnFr = {
   'England': 'Angleterre', 'Croatia': 'Croatie', 'Ghana': 'Ghana', 'Panama': 'Panama'
 };
 const frName = (en) => teamNameEnFr[en] || en;
+window.TEAM_FR = teamNameEnFr; // exposé pour fifa-ranking.js (noms FR des équipes ESPN)
 
 // Status helpers
 function statusKey(stateRaw) {
@@ -891,6 +900,7 @@ async function fetchLiveScores(manual = false) {
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     _lastLiveData = data;
+    if (window.updateFifaRanking) window.updateFifaRanking(data.events || []); // maj live du classement FIFA
     renderLiveScores(data, manual);
   } catch (err) {
     console.warn('ESPN fetch failed:', err);
@@ -1225,6 +1235,7 @@ function setFav(name) {
   localStorage.setItem(FAV_KEY, name);
   closeFavModal();
   renderFavHero();
+  if (window.FifaRanking) FifaRanking.rerender(); // maj de la ★ dans le classement FIFA
   if (_lastLiveData) renderLiveScores(_lastLiveData); // re-surligne ses matchs
   if (typeof toast === 'function') toast(`⭐ ${window.t('fav_set')} ${name}`, 'done', '⭐', 3000);
 }
@@ -1661,6 +1672,12 @@ function closeCountryCard() {
   setTimeout(() => { if (!backdrop.classList.contains('open')) backdrop.innerHTML = ''; }, 300);
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCountryCard(); });
+</script>
+<script>
+/* Classement FIFA en direct — widget dashboard (module partagé fifa-ranking.js).
+   Top 10 + « Voir tout », ★ sur la sélection favorite ; alimenté par
+   loadAllResults() + le poll live (updateFifaRanking). */
+if (window.FifaRanking) FifaRanking.mount(document.getElementById('fifa-ranking-dash'), { mode: 'widget', collapsed: 10 });
 </script>
 </body>
 </html>
