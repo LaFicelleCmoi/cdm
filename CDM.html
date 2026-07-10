@@ -23,7 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=21"></script>
+<script src="i18n.js?v=22"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -470,6 +470,30 @@ body::before {
 .fr-note { text-align: center; color: var(--muted); font-size: 0.72em; margin-top: 14px; line-height: 1.6; }
 .fr-search-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
 .fr-empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 0.9em; }
+.fr-row { cursor: pointer; }
+.fr-res.live { background: var(--live, #ff4757); color: #fff; }
+/* Modale : 5 derniers matchs de l'équipe */
+.fr-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); z-index: 300; align-items: center; justify-content: center; padding: 18px; }
+.fr-modal-backdrop.open { display: flex; }
+.fr-modal { position: relative; width: 400px; max-width: 100%; max-height: 88vh; overflow-y: auto; background: var(--panel2, #10202f); border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,0.7); padding: 22px; animation: modalIn 0.22s ease; }
+.fr-modal-close { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; font-size: 0.95em; cursor: pointer; transition: background 0.15s; }
+.fr-modal-close:hover { background: rgba(255,255,255,0.15); }
+.fr-modal-head { display: flex; align-items: center; gap: 14px; margin-bottom: 16px; padding-right: 30px; }
+.fr-modal-flag { width: 56px; height: 38px; object-fit: cover; border-radius: 5px; box-shadow: 0 2px 8px rgba(0,0,0,0.5); flex-shrink: 0; }
+.fr-modal-name { font-family: var(--font-d); font-size: 1.55em; color: #fff; line-height: 1; }
+.fr-modal-sub { color: var(--gold); font-size: 0.82em; font-weight: 700; margin-top: 5px; }
+.fr-modal-listtitle { font-size: 0.68em; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin: 4px 0 8px; }
+.fr-mm { display: grid; grid-template-columns: 30px 1fr auto; gap: 10px; align-items: center; padding: 9px 2px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.fr-mm:last-child { border-bottom: none; }
+.fr-mm-mid { min-width: 0; }
+.fr-mm-opp { display: flex; align-items: center; gap: 7px; font-weight: 700; color: #fff; font-size: 0.92em; }
+.fr-mm-opp img { width: 20px; height: 13px; object-fit: cover; border-radius: 2px; }
+.fr-mm-stage { color: var(--muted); font-size: 0.72em; margin-top: 2px; }
+.fr-mm-right { text-align: right; }
+.fr-mm-score { font-family: var(--font-d); font-size: 1.16em; color: #fff; white-space: nowrap; }
+.fr-mm-so { font-family: var(--font-b); font-size: 0.55em; color: var(--muted); }
+.fr-mm-date { color: var(--muted); font-size: 0.7em; margin-top: 2px; }
+.fr-mm.live .fr-mm-score { color: var(--live, #ff4757); }
 @media (max-width: 640px) {
   .fr-colhead, .fr-row { grid-template-columns: 60px 1fr 66px; }
   .fr-match, .fr-colhead .c-match { display: none; }
@@ -2975,6 +2999,11 @@ document.addEventListener('langchange', () => {
     const input = wrap.querySelector('#fr-search');
     input.value = _query;
     input.addEventListener('input', () => { _query = input.value; applyFilter(); });
+    // clic sur une ligne → 5 derniers matchs de l'équipe (délégation : #fr-body persiste)
+    const body = wrap.querySelector('#fr-body');
+    if (body) body.addEventListener('click', (e) => {
+      const row = e.target.closest('.fr-row'); if (row) openTeamModal(row.getAttribute('data-name'), row);
+    });
     return wrap;
   }
 
@@ -3009,6 +3038,71 @@ document.addEventListener('langchange', () => {
         + '</div>';
     }).join('');
     applyFilter();
+  }
+
+  // ---- 5 derniers matchs de l'équipe cliquée (modale) ----
+  const STAGE = { 'group-stage':'phase_groups','round-of-32':'phase_r32','round-of-16':'phase_r16','quarterfinals':'phase_qf','semifinals':'phase_sf','3rd-place-match':'phase_3p','final':'phase_final' };
+  function teamMatches(fr, n) {
+    const out = [];
+    Object.values(_all).forEach(e => {
+      const c = e.competitions && e.competitions[0]; if (!c) return;
+      const st = c.status && c.status.type && c.status.type.state; if (st !== 'post' && st !== 'in') return;
+      const cs = c.competitors || []; if (cs.length < 2) return;
+      let me = null, opp = null;
+      if (frOf(cs[0].team.displayName) === fr) { me = cs[0]; opp = cs[1]; }
+      else if (frOf(cs[1].team.displayName) === fr) { me = cs[1]; opp = cs[0]; }
+      if (!me) return;
+      const oppFr = frOf(opp.team.displayName);
+      out.push({ date: e.date, slug: (e.season && e.season.slug) || 'group-stage', live: st === 'in',
+        oppFr, oppAbbr: (opp.team.abbreviation || '').toUpperCase(), oppIso: ISO[oppFr],
+        gf: parseInt(me.score), ga: parseInt(opp.score),
+        soF: me.shootoutScore != null ? parseInt(me.shootoutScore) : null,
+        soA: opp.shootoutScore != null ? parseInt(opp.shootoutScore) : null });
+    });
+    out.sort((a, b) => new Date(b.date) - new Date(a.date));   // plus récent d'abord
+    return out.slice(0, n || 5);
+  }
+  function ensureModal() {
+    let bd = document.getElementById('fr-modal-bd'); if (bd) return bd;
+    bd = document.createElement('div'); bd.className = 'fr-modal-backdrop'; bd.id = 'fr-modal-bd';
+    bd.innerHTML = '<div class="fr-modal" role="dialog" aria-modal="true"><button class="fr-modal-close" aria-label="Fermer">✕</button><div class="fr-modal-body"></div></div>';
+    document.body.appendChild(bd);
+    bd.addEventListener('click', (e) => { if (e.target === bd || e.target.classList.contains('fr-modal-close')) closeModal(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeModal(); });
+    return bd;
+  }
+  function closeModal() { const bd = document.getElementById('fr-modal-bd'); if (bd) bd.classList.remove('open'); }
+  function openTeamModal(fr, row) {
+    if (!fr) return;
+    const t = (k) => (window.t ? window.t(k) : k);
+    const bd = ensureModal();
+    const rank = row ? ((row.querySelector('.fr-pos') || {}).textContent || '') : '';
+    const pts = row ? ((row.querySelector('.fr-pts') || {}).textContent || '') : '';
+    const ms = teamMatches(fr, 5);
+    const fmt = (d) => (typeof dayjs !== 'undefined') ? dayjs(d).format('D MMM YYYY') : new Date(d).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
+    let listHtml;
+    if (!ms.length) listHtml = '<div class="fr-empty">' + t('ranking_no_wc') + '</div>';
+    else listHtml = ms.map(m => {
+      const hasSO = m.soF != null && m.soA != null;
+      const won = hasSO ? m.soF > m.soA : m.gf > m.ga;
+      const lost = hasSO ? m.soF < m.soA : m.gf < m.ga;
+      const cls = m.live ? 'live' : won ? 'w' : lost ? 'l' : 'd';
+      const mark = m.live ? '●' : won ? '✓' : lost ? '✗' : '•';
+      const so = hasSO ? ' <span class="fr-mm-so">(' + m.soF + '-' + m.soA + ' ' + t('shootout_abbr') + ')</span>' : '';
+      const of = m.oppIso ? '<img src="' + flag(m.oppIso, 40) + '" alt="" onerror="this.style.display=\'none\'">' : '';
+      return '<div class="fr-mm ' + cls + '"><span class="fr-res ' + cls + '">' + mark + '</span>'
+        + '<div class="fr-mm-mid"><div class="fr-mm-opp">' + of + '<span>' + esc(m.oppAbbr || m.oppFr) + '</span></div>'
+        + '<div class="fr-mm-stage">' + (STAGE[m.slug] ? t(STAGE[m.slug]) : '') + '</div></div>'
+        + '<div class="fr-mm-right"><div class="fr-mm-score">' + m.gf + '–' + m.ga + so + '</div>'
+        + '<div class="fr-mm-date">' + esc(fmt(m.date)) + '</div></div></div>';
+    }).join('');
+    bd.querySelector('.fr-modal-body').innerHTML =
+      '<div class="fr-modal-head"><img class="fr-modal-flag" src="' + flag(ISO[fr], 160) + '" alt="" onerror="this.style.visibility=\'hidden\'">'
+      + '<div><div class="fr-modal-name">' + esc(fr) + '</div><div class="fr-modal-sub">'
+      + (rank ? '#' + rank + ' · ' : '') + esc(pts) + ' pts</div></div></div>'
+      + '<div class="fr-modal-listtitle">' + t('ranking_last5') + '</div>'
+      + '<div class="fr-modal-list">' + listHtml + '</div>';
+    bd.classList.add('open');
   }
 
   // changement de langue → reconstruit la coquille (libellés) en gardant la recherche
