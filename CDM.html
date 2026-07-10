@@ -23,7 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=22"></script>
+<script src="i18n.js?v=23"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -494,6 +494,12 @@ body::before {
 .fr-mm-so { font-family: var(--font-b); font-size: 0.55em; color: var(--muted); }
 .fr-mm-date { color: var(--muted); font-size: 0.7em; margin-top: 2px; }
 .fr-mm.live .fr-mm-score { color: var(--live, #ff4757); }
+.fr-spark-wrap { background: rgba(0,0,0,0.22); border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; padding: 12px 14px 8px; margin-bottom: 16px; }
+.fr-spark-top { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px; }
+.fr-spark-label { font-size: 0.66em; font-weight: 800; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
+.fr-spark-delta { font-family: var(--font-b); font-weight: 800; font-size: 0.85em; white-space: nowrap; }
+.fr-spark { width: 100%; height: 62px; display: block; }
+.fr-spark-axis { display: flex; justify-content: space-between; font-size: 0.62em; color: var(--muted); margin-top: 3px; }
 @media (max-width: 640px) {
   .fr-colhead, .fr-row { grid-template-columns: 60px 1fr 66px; }
   .fr-match, .fr-colhead .c-match { display: none; }
@@ -2902,6 +2908,7 @@ document.addEventListener('langchange', () => {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
   let _all = {};   // id -> event ESPN (fusion des rafraîchissements)
+  let _lastTraj = {}; // trajectoire des points par équipe (mini-graphique d'évolution)
   let _query = ''; // recherche courante (persiste entre les re-render 30 s)
   // recherche sans accents (é→e, ç→c…) : NFD puis on retire les diacritiques combinants (U+0300–U+036F)
   const norm = (s) => String(s == null ? '' : s).normalize('NFD').split('').filter(c => { const x = c.charCodeAt(0); return x < 0x300 || x > 0x36f; }).join('').toLowerCase();
@@ -2912,6 +2919,8 @@ document.addEventListener('langchange', () => {
 
   function computed() {
     const pts = Object.assign({}, PTS0);
+    const traj = {};
+    Object.keys(PTS0).forEach(fr => { traj[fr] = [{ date: null, pts: PTS0[fr] }]; }); // départ = base 11 juin
     const done = Object.values(_all).filter(e => {
       const c = e.competitions && e.competitions[0];
       return c && c.status && c.status.type && c.status.type.state === 'post';
@@ -2928,12 +2937,13 @@ document.addEventListener('langchange', () => {
       let wA, wB;
       if (soA != null && soB != null) { if (soA > soB) { wA = 0.75; wB = 0.5; } else { wA = 0.5; wB = 0.75; } }
       else if (sA > sB) { wA = 1; wB = 0; } else if (sA < sB) { wA = 0; wB = 1; } else { wA = 0.5; wB = 0.5; }
-      if (frA in pts) pts[frA] = pA + I * (wA - We(pA, pB));
-      if (frB in pts) pts[frB] = pB + I * (wB - We(pB, pA));
+      if (frA in pts) { pts[frA] = pA + I * (wA - We(pA, pB)); traj[frA].push({ date: e.date, pts: pts[frA] }); }
+      if (frB in pts) { pts[frB] = pB + I * (wB - We(pB, pA)); traj[frB].push({ date: e.date, pts: pts[frB] }); }
     }
     const list = Object.keys(PTS0).map(fr => ({ fr, iso: ISO[fr], pts: pts[fr], rank0: RANK0[fr] }))
       .sort((a, b) => b.pts - a.pts);
     list.forEach((t, i) => { t.rank = i + 1; t.move = t.rank0 - t.rank; });   // move>0 = monte
+    _lastTraj = traj;
     return list;
   }
 
@@ -3072,9 +3082,37 @@ document.addEventListener('langchange', () => {
     return bd;
   }
   function closeModal() { const bd = document.getElementById('fr-modal-bd'); if (bd) bd.classList.remove('open'); }
+  // mini-graphique SVG de l'évolution des points (base 11 juin → chaque match)
+  function sparkline(fr) {
+    const tr = _lastTraj[fr];
+    if (!tr || tr.length < 2) return '';               // aucune évolution (équipe hors CDM)
+    const t = (k) => (window.t ? window.t(k) : k);
+    const W = 340, H = 62, pad = 7;
+    const vals = tr.map(p => p.pts);
+    const min = Math.min.apply(null, vals), max = Math.max.apply(null, vals), range = (max - min) || 1;
+    const n = tr.length, base = tr[0].pts, cur = vals[n - 1], gained = cur >= base;
+    const col = gained ? '#3ee07a' : '#ff5252';
+    const X = i => pad + (i / (n - 1)) * (W - 2 * pad);
+    const Y = v => pad + (1 - (v - min) / range) * (H - 2 * pad);
+    const line = tr.map((p, i) => X(i).toFixed(1) + ',' + Y(p.pts).toFixed(1)).join(' ');
+    const area = line + ' ' + X(n - 1).toFixed(1) + ',' + (H - pad) + ' ' + pad + ',' + (H - pad);
+    const baseY = Y(base).toFixed(1);
+    const dots = tr.map((p, i) => '<circle cx="' + X(i).toFixed(1) + '" cy="' + Y(p.pts).toFixed(1) + '" r="2.1" fill="' + col + '"/>').join('');
+    const delta = cur - base, deltaTxt = (delta >= 0 ? '+' : '') + delta.toFixed(2);
+    return '<div class="fr-spark-wrap">'
+      + '<div class="fr-spark-top"><span class="fr-spark-label">' + t('ranking_evolution') + '</span>'
+      + '<span class="fr-spark-delta" style="color:' + col + '">' + (gained ? '▲' : '▼') + ' ' + deltaTxt + ' pts</span></div>'
+      + '<svg class="fr-spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none" aria-hidden="true">'
+      + '<line x1="' + pad + '" x2="' + (W - pad) + '" y1="' + baseY + '" y2="' + baseY + '" stroke="rgba(255,255,255,0.22)" stroke-width="1" stroke-dasharray="4 4"/>'
+      + '<polygon points="' + area + '" fill="' + col + '" fill-opacity="0.13"/>'
+      + '<polyline points="' + line + '" fill="none" stroke="' + col + '" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round"/>'
+      + dots + '</svg>'
+      + '<div class="fr-spark-axis"><span>' + base.toFixed(0) + '</span><span>' + cur.toFixed(0) + '</span></div></div>';
+  }
   function openTeamModal(fr, row) {
     if (!fr) return;
     const t = (k) => (window.t ? window.t(k) : k);
+    if (!_lastTraj[fr]) computed();                    // garantit une trajectoire à jour
     const bd = ensureModal();
     const rank = row ? ((row.querySelector('.fr-pos') || {}).textContent || '') : '';
     const pts = row ? ((row.querySelector('.fr-pts') || {}).textContent || '') : '';
@@ -3100,6 +3138,7 @@ document.addEventListener('langchange', () => {
       '<div class="fr-modal-head"><img class="fr-modal-flag" src="' + flag(ISO[fr], 160) + '" alt="" onerror="this.style.visibility=\'hidden\'">'
       + '<div><div class="fr-modal-name">' + esc(fr) + '</div><div class="fr-modal-sub">'
       + (rank ? '#' + rank + ' · ' : '') + esc(pts) + ' pts</div></div></div>'
+      + sparkline(fr)
       + '<div class="fr-modal-listtitle">' + t('ranking_last5') + '</div>'
       + '<div class="fr-modal-list">' + listHtml + '</div>';
     bd.classList.add('open');
