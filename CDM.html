@@ -12,6 +12,10 @@
 <meta property="og:description" content="Suis les scores réels et simule la phase finale de la Coupe du Monde 2026.">
 <meta property="og:locale" content="fr_FR">
 <meta name="twitter:card" content="summary">
+<!-- PERF : ouvre tôt les connexions aux CDN (handshake TLS en parallèle → FCP plus rapide) -->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://flagcdn.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
 <!-- Day.js + plugins (dates, fuseaux, durées, locale FR) -->
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js"></script>
@@ -46,11 +50,9 @@ html { scroll-behavior: smooth; }
 body {
   font-family: var(--font-b);
   /* Pelouse : projecteur doré-vert en haut + dégradé vignette vers le bas */
-  background:
-    radial-gradient(120% 90% at 50% -20%, rgba(251,197,49,0.07), transparent 55%),
-    radial-gradient(120% 90% at 50% -10%, rgba(46,213,115,0.10), transparent 50%),
-    radial-gradient(140% 120% at 50% 35%, #0e2c1c 0%, #081f13 48%, #040e09 100%);
-  background-attachment: fixed;
+  /* PERF : le fond fixe passe sur body::before (calque fixe peint 1×, composité au
+     scroll) au lieu de background-attachment:fixed = repaint plein écran à chaque scroll. */
+  background: #040e09;
   color: var(--white);
   min-height: 100vh;
   overflow-x: hidden;
@@ -61,7 +63,10 @@ body::before {
   position: fixed; inset: 0;
   background-image:
     repeating-linear-gradient(90deg, rgba(255,255,255,0.022) 0 72px, transparent 72px 144px),
-    repeating-linear-gradient(90deg, rgba(0,0,0,0.06) 0 144px, transparent 144px 288px);
+    repeating-linear-gradient(90deg, rgba(0,0,0,0.06) 0 144px, transparent 144px 288px),
+    radial-gradient(120% 90% at 50% -20%, rgba(251,197,49,0.07), transparent 55%),
+    radial-gradient(120% 90% at 50% -10%, rgba(46,213,115,0.10), transparent 50%),
+    radial-gradient(140% 120% at 50% 35%, #0e2c1c 0%, #081f13 48%, #040e09 100%);
   pointer-events: none; z-index: 0;
 }
 
@@ -427,7 +432,10 @@ body::before {
 .spark-dot { position: fixed; pointer-events: none; width: 4px; height: 4px; border-radius: 50%; background: var(--gold); z-index: 9999; }
 
 /* === Tilt 3D cards === */
-.group-card, .ko-card { transform-style: preserve-3d; will-change: transform; }
+/* PERF : will-change limité au survol → on ne promeut plus 44+ cartes en calques
+   GPU permanents (mémoire + compositing inutiles). Le tilt n'a lieu qu'au survol. */
+.group-card, .ko-card { transform-style: preserve-3d; }
+.group-card:hover, .ko-card:hover { will-change: transform; }
 
 /* === Reset confirm modal (custom) === */
 .confirm-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(6px); z-index: 200; align-items: center; justify-content: center; }
@@ -792,6 +800,7 @@ window.addEventListener('click', (e) => {
   const ctx = canvas.getContext('2d');
   const dotSize = 8; const gap = 45; const proximity = 150; const shockRadius = 250; const shockStrength = 15; const tension = 0.04; const friction = 0.85;
   let dots = []; let pointer = { x: -1000, y: -1000, vx: 0, vy: 0, lastX: 0, lastY: 0, lastTime: performance.now() };
+  let rafId = null, lastMove = performance.now();
 
   function buildGrid() {
     const width = window.innerWidth; const height = window.innerHeight; const dpr = window.devicePixelRatio || 1;
@@ -807,25 +816,34 @@ window.addEventListener('click', (e) => {
 
   function draw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let moving = false;
     for (const dot of dots) {
       dot.vx += (0 - dot.xOffset) * tension; dot.vy += (0 - dot.yOffset) * tension;
       dot.vx *= friction; dot.vy *= friction; dot.xOffset += dot.vx; dot.yOffset += dot.vy;
+      if (Math.abs(dot.vx) > 0.02 || Math.abs(dot.vy) > 0.02 || Math.abs(dot.xOffset) > 0.05 || Math.abs(dot.yOffset) > 0.05) moving = true;
       const ox = dot.cx + dot.xOffset; const oy = dot.cy + dot.yOffset;
       const dx = dot.cx - pointer.x; const dy = dot.cy - pointer.y; const dist = Math.sqrt(dx * dx + dy * dy);
-      let r = 255, g = 255, b = 255, a = 0.05; 
+      let r = 255, g = 255, b = 255, a = 0.05;
       if (dist < proximity) {
         const t = 1 - (dist / proximity);
-        r = Math.round(255 + (251 - 255) * t); g = Math.round(255 + (197 - 255) * t); b = Math.round(255 + (49 - 255) * t); a = 0.05 + (0.95 * t); 
+        r = Math.round(255 + (251 - 255) * t); g = Math.round(255 + (197 - 255) * t); b = Math.round(255 + (49 - 255) * t); a = 0.05 + (0.95 * t);
       }
       ctx.beginPath(); ctx.arc(ox, oy, dotSize / 2, 0, Math.PI * 2); ctx.fillStyle = `rgba(${r},${g},${b},${a})`; ctx.fill();
     }
-    requestAnimationFrame(draw);
+    // PERF : la grille S'ENDORT quand plus rien ne bouge et que la souris est inactive
+    // (>0,4 s) → fini le canvas plein écran redessiné 60 fps EN PERMANENCE (1 cœur brûlé
+    // en continu = cause majeure du lag PC). Réveil au mousemove / click / resize / retour d'onglet.
+    if (!moving && (performance.now() - lastMove) > 400) { rafId = null; return; }
+    rafId = requestAnimationFrame(draw);
   }
+  function wakeGrid() { if (rafId == null && !document.hidden) rafId = requestAnimationFrame(draw); }
+  function sleepGrid() { if (rafId != null) { cancelAnimationFrame(rafId); rafId = null; } }
 
   window.addEventListener('mousemove', e => {
     const now = performance.now(); const dt = now - pointer.lastTime || 16;
     pointer.vx = ((e.clientX - pointer.lastX) / dt) * 10; pointer.vy = ((e.clientY - pointer.lastY) / dt) * 10;
     pointer.lastX = pointer.x = e.clientX; pointer.lastY = pointer.y = e.clientY; pointer.lastTime = now;
+    lastMove = now; wakeGrid();
     if (Math.hypot(pointer.vx, pointer.vy) > 2) {
       for (const dot of dots) {
         if (Math.hypot(dot.cx - pointer.x, dot.cy - pointer.y) < proximity) { dot.vx += pointer.vx * 0.15; dot.vy += pointer.vy * 0.15; }
@@ -841,8 +859,13 @@ window.addEventListener('click', (e) => {
         dot.vx += Math.cos(angle) * shockStrength * falloff; dot.vy += Math.sin(angle) * shockStrength * falloff;
       }
     }
+    lastMove = performance.now(); wakeGrid();
   });
-  window.addEventListener('resize', buildGrid); buildGrid(); draw();
+  window.addEventListener('resize', () => { buildGrid(); lastMove = performance.now(); wakeGrid(); });
+  document.addEventListener('visibilitychange', () => { if (document.hidden) sleepGrid(); else { lastMove = performance.now(); wakeGrid(); } });
+  // souris qui quitte la fenêtre → efface la surbrillance puis laisse la grille s'endormir
+  window.addEventListener('mouseout', (e) => { if (!e.relatedTarget) { pointer.x = pointer.y = -1000; lastMove = performance.now(); wakeGrid(); } });
+  buildGrid(); wakeGrid();
 })();
 
 let isInitializing = true;

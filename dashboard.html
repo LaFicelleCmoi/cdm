@@ -12,6 +12,10 @@
 <meta property="og:description" content="Scores en direct, classements et phase finale de la Coupe du Monde 2026. Projet de fan, non officiel.">
 <meta property="og:locale" content="fr_FR">
 <meta name="twitter:card" content="summary">
+<!-- PERF : ouvre tôt les connexions aux CDN (handshake TLS en parallèle → FCP plus rapide) -->
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<link rel="preconnect" href="https://flagcdn.com">
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700;900&display=swap" rel="stylesheet">
 <!-- Day.js + plugins (dates, fuseaux, durées, temps relatif, locale FR) -->
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/dayjs.min.js"></script>
@@ -312,9 +316,11 @@ body {
     0 6px 24px rgba(0,0,0,0.35),
     inset 0 1px 0 rgba(255,255,255,0.25),
     inset 0 -1px 0 rgba(0,0,0,0.2);
-  /* SVG refraction — Chromium ; dégrade en simple blur ailleurs */
+  /* PERF : filtre de déplacement SVG (feTurbulence+feDisplacementMap) RETIRÉ — il se
+     recalculait à chaque repaint sous le badge "EN DIRECT" animé = très coûteux sur PC.
+     Simple flou : visuellement quasi identique, coût compositeur bien moindre. */
   -webkit-backdrop-filter: blur(8px) saturate(1.4);
-  backdrop-filter: blur(8px) url(#glass-distortion) saturate(1.4);
+  backdrop-filter: blur(8px) saturate(1.4);
   overflow: hidden;
 }
 .glass-surface::before {
@@ -379,12 +385,15 @@ body {
 }
 .flag-loop-track { display: flex; width: max-content; gap: 14px; animation: flagScroll 60s linear infinite; }
 .flag-loop:hover .flag-loop-track { animation-play-state: paused; }
+/* PERF : marquee en pause quand la section est hors écran (compositeur au repos) */
+.flag-loop-track.io-paused { animation-play-state: paused; }
 @keyframes flagScroll { from { transform: translateX(0); } to { transform: translateX(-50%); } }
 .flag-chip {
   display: flex; align-items: center; gap: 8px; flex-shrink: 0;
   padding: 8px 14px; border-radius: 12px;
-  background: rgba(15,25,35,0.6); border: 1px solid var(--border);
-  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  /* PERF : fond opaque au lieu de backdrop-filter blur — 96 puces floutées qui
+     défilent = re-flou de 96 zones à chaque frame. Fond solide = visuel identique, 0 flou. */
+  background: rgba(17,27,37,0.92); border: 1px solid var(--border);
   transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 .flag-chip { cursor: pointer; }
@@ -540,15 +549,6 @@ body {
 <body>
 
 <canvas id="confetti-canvas"></canvas>
-
-<!-- SVG refraction filter for .glass-surface (ReactBits GlassSurface) -->
-<svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <filter id="glass-distortion" x="0%" y="0%" width="100%" height="100%">
-    <feTurbulence type="fractalNoise" baseFrequency="0.008 0.012" numOctaves="2" seed="92" result="noise"/>
-    <feGaussianBlur in="noise" stdDeviation="2" result="blurred"/>
-    <feDisplacementMap in="SourceGraphic" in2="blurred" scale="42" xChannelSelector="R" yChannelSelector="G"/>
-  </filter>
-</svg>
 
 <div id="lang-toggle" style="top:18px; left:20px;"></div>
 
@@ -985,11 +985,20 @@ function bindLiveGlow() {
   _liveGlowBound = true;
   const grid = document.getElementById('live-cards-grid');
   if (!grid) return;
+  // PERF : ne lit la géométrie QUE de la carte sous le curseur (seule à afficher le
+  // reflet), et throttle en rAF → fini le getBoundingClientRect sur TOUTES les cartes
+  // à chaque mousemove (reflow forcé en boucle chaude).
+  let glowRaf = 0, glowEvt = null;
   grid.addEventListener('mousemove', (e) => {
-    grid.querySelectorAll('.live-card').forEach(card => {
+    glowEvt = e;
+    if (glowRaf) return;
+    glowRaf = requestAnimationFrame(() => {
+      glowRaf = 0;
+      const card = glowEvt.target.closest && glowEvt.target.closest('.live-card');
+      if (!card) return;
       const r = card.getBoundingClientRect();
-      card.style.setProperty('--mouse-x', (e.clientX - r.left) + 'px');
-      card.style.setProperty('--mouse-y', (e.clientY - r.top) + 'px');
+      card.style.setProperty('--mouse-x', (glowEvt.clientX - r.left) + 'px');
+      card.style.setProperty('--mouse-y', (glowEvt.clientY - r.top) + 'px');
     });
   });
 }
@@ -1163,11 +1172,19 @@ const groupOf = (name) => Object.keys(WC_GROUPS).find(g => WC_GROUPS[g].includes
   const chip = (name) =>
     `<div class="flag-chip" data-country="${name.replace(/"/g, '&quot;')}" title="${name}">
        <img src="${flagUrl(name, 80)}" srcset="${flagUrl(name, 160)} 2x" alt="${name}"
-            onerror="this.style.display='none'">
+            loading="lazy" decoding="async" onerror="this.style.display='none'">
        <span>${name}</span>
      </div>`;
   const html = allNations.map(chip).join('');
   track.innerHTML = html + html; // duplicate → seamless -50% loop
+
+  // PERF : ne fait défiler le marquee que lorsqu'il est visible ; hors écran → pause
+  // (l'anim CSS ne se met pas en pause toute seule → compositeur sollicité en continu).
+  if ('IntersectionObserver' in window) {
+    new IntersectionObserver((es) => {
+      track.classList.toggle('io-paused', !(es[0] && es[0].isIntersecting));
+    }, { rootMargin: '150px' }).observe(track);
+  }
 
   // Event delegation → open the PixelCard for the clicked nation
   track.addEventListener('click', (e) => {
@@ -1188,7 +1205,7 @@ function buildFavGrid() {
   const all = Object.values(WC_GROUPS).flat().sort((a, b) => a.localeCompare(b, 'fr'));
   grid.innerHTML = all.map(n => `
     <button class="fav-opt" data-country="${n.replace(/"/g, '&quot;')}" onclick="setFav(this.dataset.country)">
-      <img src="${flagUrl(n, 80)}" srcset="${flagUrl(n, 160)} 2x" alt="" onerror="this.style.display='none'">
+      <img src="${flagUrl(n, 80)}" srcset="${flagUrl(n, 160)} 2x" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">
       <span>${n}</span>
     </button>`).join('');
 }
@@ -1310,7 +1327,7 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
     <div class="go-card">
       <div class="go-head"><span data-i18n="group">Groupe</span> ${g}</div>
       ${teams.map(t => `<div class="go-team" data-country="${t.replace(/"/g, '&quot;')}" title="${t}">
-        <img src="${flagUrl(t, 40)}" srcset="${flagUrl(t, 80)} 2x" alt="" onerror="this.style.display='none'">
+        <img src="${flagUrl(t, 40)}" srcset="${flagUrl(t, 80)} 2x" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">
         <span>${t}</span>
       </div>`).join('')}
     </div>`).join('');
