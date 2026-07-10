@@ -407,7 +407,9 @@ body {
 /* =========================================================
    PIXEL CARD — carte pays "collectible" (ReactBits PixelCard)
    ========================================================= */
-.country-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); z-index: 1100; align-items: center; justify-content: center; padding: 20px; }
+/* PERF : PAS de backdrop-filter blur (plein écran, re-flouté à chaque frame de ce
+   qui bouge derrière — vidéo/stream = lag). Fond opaque : même effet, coût nul. */
+.country-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(4,10,7,0.88); z-index: 1100; align-items: center; justify-content: center; padding: 20px; }
 .country-modal-backdrop.open { display: flex; animation: fadeIn 0.25s ease; }
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
@@ -459,7 +461,8 @@ body {
 .toast.t-done { border-left-color: #2ed573; }
 .toast.t-warn { border-left-color: #ff7f50; }
 
-.fav-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.82); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); z-index: 1200; align-items: center; justify-content: center; padding: 18px; }
+/* PERF : idem — pas de flou plein écran derrière le choix du favori. */
+.fav-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(4,10,7,0.88); z-index: 1200; align-items: center; justify-content: center; padding: 18px; }
 .fav-modal-backdrop.open { display: flex; animation: fadeIn 0.25s ease; }
 .fav-modal { width: min(680px, 100%); max-height: 86vh; display: flex; flex-direction: column; background: #0f1822; border: 1px solid rgba(251,197,49,0.3); border-radius: 18px; padding: 22px; box-shadow: 0 24px 60px rgba(0,0,0,0.6); }
 .fav-modal-title { font-family: var(--font-d); font-size: 1.7em; color: #fff; letter-spacing: 0.03em; }
@@ -1422,29 +1425,80 @@ function attachPixelCanvas(canvas, colors, { gap = 5, speed = 0.07 } = {}) {
 
   function loop(fn) {
     raf = requestAnimationFrame(() => loop(fn));
+    if (!canvas.isConnected) { stop(); return; }   // carte fermée → auto-stop (aucune fuite)
     ctx.clearRect(0, 0, w, h);
     let allIdle = true;
     for (const p of pixels) { p[fn](); if (!p.isIdle) allIdle = false; }
-    if (fn === 'disappear' && allIdle) { cancelAnimationFrame(raf); raf = null; }
-    // FIGE le scintillement après ~2,5 s (160 images) : les pixels entrent en
-    // « shimmer » infini et la boucle ne s'arrêtait JAMAIS → des milliers de
-    // pixels redessinés 60×/s tant que la carte restait ouverte = page qui rame.
-    // (survoler la carte relance brièvement l'effet, comme avant)
-    if (fn === 'appear' && ++frames > 80) { cancelAnimationFrame(raf); raf = null; }
+    if (fn === 'disappear' && allIdle) { stop(); }
+    // Fin du reveal (~1,3 s) → on enchaîne sur le SCINTILLEMENT PERMANENT LÉGER
+    // (avant : image figée = mort ; encore avant : 2000 pixels redessinés 60×/s = lag).
+    if (fn === 'appear' && ++frames > 80) { paintBase(); startTwinkle(); }
   }
   function stop() { if (raf) { cancelAnimationFrame(raf); raf = null; } }
 
-  // Dessine tous les pixels à leur taille finale, SANS boucle (figé → coût nul)
-  function drawStatic() { stop(); ctx.clearRect(0, 0, w, h); pixels.forEach(p => { p.size = p.maxSize; p.isIdle = true; p.draw(); }); }
+  // Fond : TOUS les pixels peints une fois à leur taille finale (coût nul ensuite)
+  function paintBase() { stop(); ctx.clearRect(0, 0, w, h); pixels.forEach(p => { p.size = p.maxSize; p.isIdle = true; p.draw(); }); }
+
+  /* ----- Scintillement permanent mais quasi gratuit -----
+     Le fond reste peint tel quel ; seules ~24-48 paillettes à la fois pulsent,
+     à ~30 fps, en n'effaçant/redessinant QUE leur propre cellule (zones sales).
+     ≈ 1-2 % du travail de l'ancienne boucle plein-canvas, pour un rendu plus
+     vivant. rAF se met en pause tout seul en onglet caché ; isConnected coupe
+     la boucle dès que la carte est fermée. */
+  let tws = [], lastT = 0;
+  const mixWhite = (hex, k) => { // éclaircit une couleur #rrggbb vers le blanc (k 0..1)
+    const n = parseInt(hex.slice(1), 16), r = n >> 16 & 255, g = n >> 8 & 255, b = n & 255;
+    const m = (c) => Math.round(c + (255 - c) * k);
+    return 'rgb(' + m(r) + ',' + m(g) + ',' + m(b) + ')';
+  };
+  function newTw() {
+    const p = pixels[Math.floor(Math.random() * pixels.length)];
+    return { p, t: -Math.random(), dur: 18 + Math.random() * 26 }; // t<0 = départ décalé
+  }
+  function startTwinkle() {
+    if (_reduceMotion || !pixels.length) return;   // accessibilité : image figée
+    stop();
+    const n = Math.max(24, Math.min(48, Math.round(pixels.length * 0.02)));
+    tws = Array.from({ length: n }, newTw);
+    lastT = 0;
+    raf = requestAnimationFrame(twinkleLoop);
+  }
+  function twinkleLoop(now) {
+    raf = requestAnimationFrame(twinkleLoop);
+    if (!canvas.isConnected) { stop(); return; }   // carte fermée → auto-stop
+    if (now - lastT < 31) return;                  // ~30 fps suffisent pour scintiller
+    lastT = now;
+    for (const tw of tws) {
+      tw.t += 1 / tw.dur;
+      if (tw.t < 0) continue;                      // départ décalé (évite le tir groupé)
+      const p = tw.p, cx = p.x + p.maxSizeInteger * 0.5, cy = p.y + p.maxSizeInteger * 0.5;
+      ctx.clearRect(cx - 4, cy - 4, 8, 8);         // efface SA cellule seulement (gap=8)
+      p.size = p.maxSize; p.draw();                // repeint le pixel de base
+      if (tw.t >= 1) { Object.assign(tw, newTw()); continue; } // paillette suivante
+      const k = Math.sin(Math.PI * tw.t);          // pulse 0→1→0
+      const s = p.maxSize + 1.8 * k;
+      ctx.globalAlpha = 0.35 + 0.65 * k;
+      ctx.fillStyle = mixWhite(p.color, 0.55 * k);
+      ctx.fillRect(cx - s / 2, cy - s / 2, s, s);
+      if (k > 0.65) {                              // cœur blanc au pic = étincelle
+        ctx.fillStyle = '#fff';
+        const c2 = s * 0.38;
+        ctx.fillRect(cx - c2 / 2, cy - c2 / 2, c2, c2);
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
 
   return {
     appear() {
       stop(); frames = 0;
-      if (_reduceMotion) { drawStatic(); return; } // accessibilité : image figée
+      if (_reduceMotion) { paintBase(); return; }  // accessibilité : image figée
       pixels.forEach(p => { p.isIdle = false; }); loop('appear');
     },
     disappear() { stop(); loop('disappear'); },
-    settle: drawStatic,
+    // rafraîchissement live d'une carte ouverte : fond repeint + scintillement
+    // relancé (sans rejouer le reveal)
+    settle() { paintBase(); startTwinkle(); },
     rebuild() { build(); },
     build
   };
@@ -1654,7 +1708,9 @@ function openCountryCard(name) {
   // DA du site : palette or / blanc / rouge
   const palette = ['#fbc531', '#f5d76e', '#ffffff', '#ff4757', '#ffd966'];
   // gap 5→7 : ~2× moins de pixels à animer, densité visuelle quasi identique
-  _pixelCtl = attachPixelCanvas(canvas, palette, { gap: 10, speed: 0.08 });
+  // gap 8 : champ plus dense = plus vivant. Sans surcoût : seul le scintillement
+  // (~36 paillettes) travaille en continu, pas le fond.
+  _pixelCtl = attachPixelCanvas(canvas, palette, { gap: 8, speed: 0.08 });
   _pixelCtl.build();   // synchrone : getBoundingClientRect force le layout → canvas dimensionné
   _pixelCtl.appear();  // reveal animé on open
   // Survol volontairement DÉSACTIVÉ : sur PC, mouseenter/mouseleave relançaient
