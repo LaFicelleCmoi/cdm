@@ -212,27 +212,45 @@ import * as THREE from 'three';
     ctx.restore();
   }
 
-  // Texture du cordon (sangle). colors = { c1, c2 } (couleurs de la sélection)
-  // → écharpe à DEUX BANDES le long du cordon ; sinon vert/or CDM par défaut.
+  // Texture du cordon (sangle). colors = { c1, c2, accent } (couleurs sélection).
+  // IMPORTANT (mapping UV) : l'axe X de la texture traverse la LARGEUR du cordon
+  // (512 px → ~0,32 u) et Y court LE LONG (64 px → ~1,25 u, répété) : tout est
+  // écrasé ~31× en X → un texte/glyphe y est illisible PAR CONSTRUCTION (les
+  // « marques » de l'ancienne version). Design : sangle c1 + LISERÉS c2 aux deux
+  // bords + modelé tissu — lisible à n'importe quelle échelle.
   function drawStrap(cnv, colors) {
     const x = cnv.getContext('2d');
     const W = cnv.width, H = cnv.height;
     x.clearRect(0, 0, W, H);
-    const c1 = (colors && colors.c1) || '#0b8f4e';
-    const c2 = (colors && colors.c2) || '#12b866';
-    // l'axe X de la texture traverse la LARGEUR du cordon → 2 bandes côte à côte
-    x.fillStyle = c1; x.fillRect(0, 0, W / 2, H);
-    x.fillStyle = c2; x.fillRect(W / 2, 0, W / 2, H);
-    // tissage diagonal
-    x.strokeStyle = 'rgba(0,0,0,0.14)'; x.lineWidth = 2;
+    const luma = (h) => { if (!/^#/.test(h || '')) return 128; const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255); };
+    const lighten = (h, k) => { const n = parseInt(h.slice(1), 16); const L = (c) => Math.round(c + (255 - c) * k); return 'rgb(' + L(n >> 16 & 255) + ',' + L(n >> 8 & 255) + ',' + L(n & 255) + ')'; };
+    // base : couleur principale (défaut vert CDM) ; presque noire → légèrement éclaircie
+    let base = (colors && colors.c1) || '#0b8f4e';
+    if (luma(base) < 25) base = lighten(base, 0.16);
+    // liseré : c2 si son contraste avec c1 suffit, sinon l'accent (déjà éclairci),
+    // sinon éclaircissement de c1 ; défaut : or CDM
+    let pip;
+    if (colors && colors.c1) {
+      pip = (colors.c2 && Math.abs(luma(colors.c2) - luma(colors.c1)) >= 35) ? colors.c2
+          : (colors.accent || lighten(colors.c1, 0.45));
+    } else pip = '#fbc531';
+    // sangle
+    x.fillStyle = base; x.fillRect(0, 0, W, H);
+    // modelé « tissu » : bords assombris → illusion d'épaisseur/rondeur
+    const sh = x.createLinearGradient(0, 0, W, 0);
+    sh.addColorStop(0, 'rgba(0,0,0,0.30)'); sh.addColorStop(0.16, 'rgba(0,0,0,0)');
+    sh.addColorStop(0.84, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.30)');
+    x.fillStyle = sh; x.fillRect(0, 0, W, H);
+    // liserés aux DEUX bords (piping)
+    const pw = W * 0.09;
+    x.fillStyle = pip;
+    x.fillRect(W * 0.035, 0, pw, H);
+    x.fillRect(W * 0.965 - pw, 0, pw, H);
+    // tissage : grain diagonal discret (sombre + clair décalé)
+    x.strokeStyle = 'rgba(0,0,0,0.15)'; x.lineWidth = 2;
     for (let i = -H; i < W; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + H, H); x.stroke(); }
-    // texte décoratif — couleur adaptée à la luminosité des bandes
-    const luma = (h) => { if (!/^#/.test(h)) return 128; const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255); };
-    const bright = (luma(c1) + luma(c2)) / 2 > 150;
-    x.fillStyle = bright ? 'rgba(12,22,34,0.85)' : 'rgba(255,255,255,0.92)';
-    x.textAlign = 'center'; x.textBaseline = 'middle';
-    x.font = "800 26px 'Inter',Arial,sans-serif";
-    x.fillText('★ CDM 2026 ★ CDM 2026', W / 2, H / 2 + 2);
+    x.strokeStyle = 'rgba(255,255,255,0.05)';
+    for (let i = -H + 8; i < W; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + H, H); x.stroke(); }
   }
   function makeStrapTexture(colors) {
     const c = document.createElement('canvas'); c.width = 512; c.height = 64;
@@ -657,6 +675,6 @@ import * as THREE from 'three';
     renderOnce();
   }
 
-  window.CDMLanyard = { mount, unmount, updateBadge, _debug: () => S ? { active: S.active, calm: S.calm, awakeFrames: S.awakeFrames, dragging: S.dragging } : null };
+  window.CDMLanyard = { mount, unmount, updateBadge, _drawStrap: drawStrap, _debug: () => S ? { active: S.active, calm: S.calm, awakeFrames: S.awakeFrames, dragging: S.dragging } : null };
   if (typeof window.syncLanyard === 'function') { try { window.syncLanyard(); } catch (_) {} }
 })();
