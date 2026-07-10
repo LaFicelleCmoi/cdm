@@ -24,14 +24,14 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=25"></script>
+<script src="i18n.js?v=26"></script>
 <script src="events.js?v=3"></script>
-<script src="fifa-ranking.js?v=1"></script>
+<script src="fifa-ranking.js?v=2"></script>
 <!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="lanyard.js?v=1"></script>
+<script type="module" src="lanyard.js?v=2"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -184,9 +184,18 @@ body {
 .live-team-row.winner .live-team-name { color: var(--gold); font-weight: 800; }
 .live-team-logo { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
 .live-team-name { flex: 1; font-size: 1em; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.live-team-score { font-family: var(--font-d); font-size: 2em; line-height: 1; color: #fff; min-width: 36px; text-align: right; transition: color 0.3s, transform 0.3s; }
-.live-card.state-in .live-team-score { color: var(--red); }
+.live-card-teams { position: relative; }
+.live-team-score { font-family: var(--font-d); font-size: 2em; line-height: 1; color: #fff; min-width: 36px; text-align: right; transition: color 0.3s, transform 0.3s; font-variant-numeric: tabular-nums; }
+.live-card.state-in .live-team-score { color: var(--red); text-shadow: 0 0 16px rgba(255,71,87,0.45); }
 .live-card.state-post .live-team-score { color: var(--green-b, #2ed573); }
+/* Terminé : score du VAINQUEUR en or, perdant estompé (nul = les deux normaux) */
+.live-card.state-post .live-team-row.winner .live-team-score { color: var(--gold); text-shadow: 0 0 14px rgba(251,197,49,0.35); }
+.live-card.state-post .live-card-teams:has(.winner) .live-team-row:not(.winner) { opacity: 0.55; }
+/* À venir : badge VS à la place des tirets vides */
+.live-vs { position: absolute; right: 0; top: 50%; transform: translateY(-50%); font-family: var(--font-d); font-size: 1.15em; letter-spacing: 0.08em; color: var(--gold); background: rgba(251,197,49,0.1); border: 1px solid rgba(251,197,49,0.4); border-radius: 10px; padding: 5px 10px; }
+.live-card.size-featured .live-vs { font-size: 1.5em; padding: 7px 13px; }
+/* Tirs au but (match terminé) : rappel discret sous les scores */
+.live-so { position: absolute; right: 0; bottom: -16px; font-size: 0.66em; font-weight: 800; color: var(--muted); letter-spacing: 0.04em; }
 .live-team-score.bumped { animation: scoreBump 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
 @keyframes scoreBump { 0% { transform: scale(1); } 40% { transform: scale(1.45); } 100% { transform: scale(1); } }
 
@@ -1059,13 +1068,16 @@ function buildLiveCard(ev, idx, sizeClass) {
       <div class="live-team-row ${homeWinner ? 'winner' : ''}">
         ${teamLogoTag(home)}
         <span class="live-team-name">${escapeHTML(frName(home ? home.team.displayName : '—'))}</span>
-        <span class="live-team-score" data-side="home">${state === 'pre' ? '–' : homeScore}</span>
+        <span class="live-team-score${state === 'pre' ? ' is-pre' : ''}" data-side="home">${state === 'pre' ? '' : homeScore}</span>
       </div>
       <div class="live-team-row ${awayWinner ? 'winner' : ''}">
         ${teamLogoTag(away)}
         <span class="live-team-name">${escapeHTML(frName(away ? away.team.displayName : '—'))}</span>
-        <span class="live-team-score" data-side="away">${state === 'pre' ? '–' : awayScore}</span>
+        <span class="live-team-score${state === 'pre' ? ' is-pre' : ''}" data-side="away">${state === 'pre' ? '' : awayScore}</span>
       </div>
+      ${state === 'pre' ? '<span class="live-vs" aria-hidden="true">VS</span>' : ''}
+      ${(state === 'post' && home && away && home.shootoutScore != null && away.shootoutScore != null)
+        ? `<span class="live-so">${home.shootoutScore}–${away.shootoutScore} ${window.t('shootout_abbr')}</span>` : ''}
     </div>
     <div class="live-card-footer">
       <span class="live-venue" title="${escapeHTML(venueName)}">📍 ${escapeHTML(venueCity || venueName || window.t('venue_default'))}</span>
@@ -1327,6 +1339,32 @@ function syncLanyard() {
     serial: 'FWC-' + (ISO[FAV] || 'XX').toUpperCase() + '-26',
     onClick: () => openCountryCard(FAV)
   });
+  // enrichit le badge avec les données vivantes (sans reconstruire la scène 3D)
+  if (window.CDMLanyard.updateBadge) window.CDMLanyard.updateBadge(lanyardExtra(lang));
+}
+
+// Lignes dynamiques du badge : rang mondial FIFA (recalculé en direct) + prochain match
+function lanyardExtra(lang) {
+  const ex = {};
+  try {
+    const e = (window.FifaRanking && FifaRanking.get) ? FifaRanking.get(FAV) : null;
+    if (e) ex.rankLine = (lang === 'en' ? (window.t('lanyard_world') + ' #' + e.rank) : ('#' + e.rank + ' ' + window.t('lanyard_world')))
+      + '  ·  ' + Math.round(e.pts) + ' PTS';
+  } catch (_) {}
+  try {
+    const n = getTeamNextMatch(FAV);
+    if (n) {
+      const cs = n.competitions[0].competitors || [];
+      const opp = cs.find(c => c.team && frName(c.team.displayName) !== FAV);
+      let nm = opp && opp.team ? frName(opp.team.displayName) : '?';
+      // adversaire pas encore connu (placeholder ESPN « Quarterfinal 2 Winner »…)
+      if (/winner|loser|tbd/i.test(nm)) nm = (lang === 'en') ? 'TBD' : 'À définir';
+      const when = HAS_DAYJS ? dayjs(n.date).tz(PARIS_TZ).format('D MMM · HH:mm')
+                             : new Date(n.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+      ex.subLine = (window.t('lanyard_next') + ' ' + nm + ' · ' + when).toUpperCase();
+    }
+  } catch (_) {}
+  return ex;
 }
 const escFav = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
 

@@ -66,6 +66,7 @@
   let _opts = { mode: 'full', collapsed: 10 };
   let _all = {};                       // id -> event ESPN (fusion des rafraîchissements)
   let _lastTraj = {};                  // trajectoire des points par équipe
+  let _lastList = [];                  // dernier classement calculé (pour FifaRanking.get)
   let _query = '';                     // recherche courante (persiste entre re-render)
   let _expanded = false;               // widget : top N ↔ classement complet
 
@@ -107,6 +108,7 @@
       .sort((a, b) => b.pts - a.pts);
     list.forEach((t, i) => { t.rank = i + 1; t.move = t.rank0 - t.rank; });   // move>0 = monte
     _lastTraj = traj;
+    _lastList = list;
     return list;
   }
 
@@ -533,6 +535,8 @@
       render();
     },
     update: window.updateFifaRanking,
-    rerender: render
+    rerender: render,
+    // rang + points actuels d'une équipe (nom FR) — ex. pour le badge lanyard
+    get(fr) { if (!_lastList.length) computed(); return _lastList.find(t => t.fr === fr) || null; }
   };
 })();

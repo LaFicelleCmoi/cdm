@@ -53,74 +53,121 @@ import * as THREE from 'three';
     const r = W * 0.06;
     roundRect(ctx, 4, 4, W - 8, H - 8, r);
     const g = ctx.createLinearGradient(0, 0, W, H);
-    g.addColorStop(0, '#132030'); g.addColorStop(0.55, '#0c1622'); g.addColorStop(1, '#182a1c');
+    g.addColorStop(0, '#142233'); g.addColorStop(0.55, '#0c1622'); g.addColorStop(1, '#16301e');
     ctx.fillStyle = g; ctx.fill();
-    ctx.lineWidth = W * 0.018; ctx.strokeStyle = 'rgba(251,197,49,0.85)'; ctx.stroke();
+    ctx.lineWidth = W * 0.02; ctx.strokeStyle = 'rgba(251,197,49,0.9)'; ctx.stroke();
 
     // clip au contour arrondi pour tout ce qui suit
     ctx.save();
     roundRect(ctx, 4, 4, W - 8, H - 8, r); ctx.clip();
 
+    // texture : fines rayures diagonales (peintes UNE fois, coût nul ensuite)
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.022)'; ctx.lineWidth = 6;
+    for (let d = -H; d < W + H; d += 26) { ctx.beginPath(); ctx.moveTo(d, 0); ctx.lineTo(d + H, H); ctx.stroke(); }
+    ctx.restore();
+
     // bandeau haut (compétition)
-    const headH = H * 0.13;
+    const headH = H * 0.115;
     const hg = ctx.createLinearGradient(0, 0, W, 0);
     hg.addColorStop(0, '#fbc531'); hg.addColorStop(1, '#ffe08a');
     ctx.fillStyle = hg; ctx.fillRect(0, 0, W, headH);
     ctx.fillStyle = '#10202f';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `800 ${Math.round(H * 0.045)}px 'Inter', Arial, sans-serif`;
+    ctx.font = `800 ${Math.round(H * 0.042)}px 'Inter', Arial, sans-serif`;
     ctx.fillText(spaced(opts.compLabel || 'COUPE DU MONDE 2026'), W / 2, headH * 0.52);
 
-    // drapeau (si chargé & non-tainted)
-    const flagY = headH + H * 0.045, flagW = W * 0.5, flagH = flagW * 0.66, flagX = (W - flagW) / 2;
+    // drapeau (si chargé & non-tainted), un peu plus grand + ombre portée
+    const flagY = headH + H * 0.04, flagW = W * 0.56, flagH = flagW * 0.66, flagX = (W - flagW) / 2;
     ctx.save();
-    roundRect(ctx, flagX, flagY, flagW, flagH, flagW * 0.06); ctx.clip();
+    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+    roundRect(ctx, flagX, flagY, flagW, flagH, flagW * 0.05);
+    ctx.fillStyle = '#1e3145'; ctx.fill();
+    ctx.restore();
+    ctx.save();
+    roundRect(ctx, flagX, flagY, flagW, flagH, flagW * 0.05); ctx.clip();
     if (flagImg && flagImg.complete && flagImg.naturalWidth) {
       // "cover" dans le cadre
       const s = Math.max(flagW / flagImg.naturalWidth, flagH / flagImg.naturalHeight);
       const dw = flagImg.naturalWidth * s, dh = flagImg.naturalHeight * s;
       ctx.drawImage(flagImg, flagX + (flagW - dw) / 2, flagY + (flagH - dh) / 2, dw, dh);
     } else {
-      ctx.fillStyle = '#1e3145'; ctx.fillRect(flagX, flagY, flagW, flagH);
       ctx.fillStyle = 'rgba(255,255,255,0.5)';
       ctx.font = `700 ${Math.round(H * 0.05)}px 'Inter', Arial, sans-serif`;
       ctx.fillText((opts.iso || '').toUpperCase(), W / 2, flagY + flagH / 2);
     }
     ctx.restore();
-    ctx.lineWidth = W * 0.008; ctx.strokeStyle = 'rgba(255,255,255,0.25)';
-    roundRect(ctx, flagX, flagY, flagW, flagH, flagW * 0.06); ctx.stroke();
+    ctx.lineWidth = W * 0.008; ctx.strokeStyle = 'rgba(255,255,255,0.28)';
+    roundRect(ctx, flagX, flagY, flagW, flagH, flagW * 0.05); ctx.stroke();
+
+    // pile de texte sous le drapeau (curseur vertical : les lignes optionnelles
+    // rang/prochain match décalent proprement le reste)
+    let y = flagY + flagH + H * 0.075;
 
     // nom du pays
-    const nameY = flagY + flagH + H * 0.085;
     ctx.fillStyle = '#ffffff';
-    let fs = H * 0.085;
+    let fs = H * 0.082;
     ctx.font = `700 ${Math.round(fs)}px 'Bebas Neue', 'Inter', Arial, sans-serif`;
     const name = (opts.country || '').toUpperCase();
     // réduit la police si le nom déborde
     while (ctx.measureText(name).width > W * 0.86 && fs > H * 0.045) {
       fs *= 0.92; ctx.font = `700 ${Math.round(fs)}px 'Bebas Neue', 'Inter', Arial, sans-serif`;
     }
-    ctx.fillText(name, W / 2, nameY);
+    ctx.fillText(name, W / 2, y);
+    y += H * 0.055;
 
     // groupe
     ctx.fillStyle = 'rgba(251,197,49,0.95)';
-    ctx.font = `800 ${Math.round(H * 0.038)}px 'Inter', Arial, sans-serif`;
-    ctx.fillText(spaced(`${opts.groupLabel || 'GROUPE'} ${opts.group || ''}`.trim()), W / 2, nameY + H * 0.06);
+    ctx.font = `800 ${Math.round(H * 0.036)}px 'Inter', Arial, sans-serif`;
+    ctx.fillText(spaced(`${opts.groupLabel || 'GROUPE'} ${opts.group || ''}`.trim()), W / 2, y);
+    y += H * 0.055;
+
+    // rang mondial + points FIFA (en direct) — pastille dorée
+    if (opts.rankLine) {
+      ctx.font = `800 ${Math.round(H * 0.032)}px 'Inter', Arial, sans-serif`;
+      const tw = ctx.measureText(opts.rankLine).width;
+      const pw = tw + W * 0.09, ph = H * 0.052;
+      ctx.fillStyle = 'rgba(251,197,49,0.14)';
+      roundRect(ctx, W / 2 - pw / 2, y - ph / 2, pw, ph, ph / 2); ctx.fill();
+      ctx.strokeStyle = 'rgba(251,197,49,0.55)'; ctx.lineWidth = 2;
+      roundRect(ctx, W / 2 - pw / 2, y - ph / 2, pw, ph, ph / 2); ctx.stroke();
+      ctx.fillStyle = '#ffd966';
+      ctx.fillText(opts.rankLine, W / 2, y + 1);
+      y += H * 0.062;
+    }
+
+    // prochain match (si connu)
+    if (opts.subLine) {
+      ctx.fillStyle = 'rgba(200,210,221,0.85)';
+      ctx.font = `700 ${Math.round(H * 0.026)}px 'Inter', Arial, sans-serif`;
+      ctx.fillText(opts.subLine, W / 2, y);
+      y += H * 0.05;
+    }
 
     // rôle
-    ctx.fillStyle = 'rgba(200,210,221,0.9)';
-    ctx.font = `700 ${Math.round(H * 0.03)}px 'Inter', Arial, sans-serif`;
-    ctx.fillText(spaced(opts.roleLabel || 'SUPPORTER'), W / 2, nameY + H * 0.115);
+    ctx.fillStyle = 'rgba(200,210,221,0.75)';
+    ctx.font = `700 ${Math.round(H * 0.028)}px 'Inter', Arial, sans-serif`;
+    ctx.fillText(spaced(opts.roleLabel || 'SUPPORTER'), W / 2, y);
 
     // faux code-barres + série en bas
-    const barY = H * 0.9, barH = H * 0.05;
+    const barY = H * 0.895, barH = H * 0.05;
     let bx = W * 0.14; ctx.fillStyle = '#e8eef4';
     while (bx < W * 0.86) { const bw = 1 + (Math.floor(bx * 13) % 5); ctx.fillRect(bx, barY, bw, barH); bx += bw + (2 + (Math.floor(bx * 7) % 4)); }
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.textAlign = 'right';
     ctx.font = `600 ${Math.round(H * 0.024)}px 'Inter', Arial, sans-serif`;
-    ctx.fillText(opts.serial || 'FWC-2026', W * 0.86, H * 0.975);
+    ctx.fillText(opts.serial || 'FWC-2026', W * 0.86, H * 0.972);
     ctx.textAlign = 'center';
+
+    // reflet « verre » : bande diagonale claire en haut-gauche (peinte une fois)
+    const sh = ctx.createLinearGradient(0, 0, W * 0.9, H * 0.55);
+    sh.addColorStop(0, 'rgba(255,255,255,0.10)');
+    sh.addColorStop(0.45, 'rgba(255,255,255,0.025)');
+    sh.addColorStop(0.72, 'rgba(255,255,255,0)');
+    ctx.fillStyle = sh;
+    ctx.beginPath();
+    ctx.moveTo(0, 0); ctx.lineTo(W * 0.85, 0); ctx.lineTo(W * 0.3, H * 0.62); ctx.lineTo(0, H * 0.45);
+    ctx.closePath(); ctx.fill();
 
     ctx.restore();
 
@@ -581,6 +628,16 @@ import * as THREE from 'three';
   }
 
   // ---- API + auto-init si le favori a été rendu avant ce module ----------
-  window.CDMLanyard = { mount, unmount, _debug: () => S ? { active: S.active, calm: S.calm, awakeFrames: S.awakeFrames, dragging: S.dragging } : null };
+  // Met à jour le CONTENU du badge (rang FIFA, prochain match…) sans reconstruire
+  // la scène 3D : fusion des opts + redessin de la texture avant (coût : 1 canvas 2D).
+  function updateBadge(extra) {
+    if (!S || !S.alive || !extra) return;
+    Object.assign(S.opts, extra);
+    drawBadge(S.front, S.opts, S.flagImg || null);
+    S.frontTex.needsUpdate = true;
+    renderOnce();
+  }
+
+  window.CDMLanyard = { mount, unmount, updateBadge, _debug: () => S ? { active: S.active, calm: S.calm, awakeFrames: S.awakeFrames, dragging: S.dragging } : null };
   if (typeof window.syncLanyard === 'function') { try { window.syncLanyard(); } catch (_) {} }
 })();
