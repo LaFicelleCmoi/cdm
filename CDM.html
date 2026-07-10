@@ -23,7 +23,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=20"></script>
+<script src="i18n.js?v=21"></script>
 <script src="events.js?v=3"></script>
 <style>
 :root {
@@ -468,6 +468,8 @@ body::before {
 .fr-next { color: var(--muted); }
 .fr-pts { font-family: var(--font-d); font-size: 1.18em; color: var(--gold); text-align: right; }
 .fr-note { text-align: center; color: var(--muted); font-size: 0.72em; margin-top: 14px; line-height: 1.6; }
+.fr-search-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
+.fr-empty { text-align: center; color: var(--muted); padding: 26px 10px; font-size: 0.9em; }
 @media (max-width: 640px) {
   .fr-colhead, .fr-row { grid-template-columns: 60px 1fr 66px; }
   .fr-match, .fr-colhead .c-match { display: none; }
@@ -2876,6 +2878,9 @@ document.addEventListener('langchange', () => {
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
   let _all = {};   // id -> event ESPN (fusion des rafraîchissements)
+  let _query = ''; // recherche courante (persiste entre les re-render 30 s)
+  // recherche sans accents (é→e, ç→c…) : NFD puis on retire les diacritiques combinants (U+0300–U+036F)
+  const norm = (s) => String(s == null ? '' : s).normalize('NFD').split('').filter(c => { const x = c.charCodeAt(0); return x < 0x300 || x > 0x36f; }).join('').toLowerCase();
   window.updateFifaRanking = function (events) {
     (events || []).forEach(e => { if (e && e.id) _all[e.id] = e; });
     render();
@@ -2949,34 +2954,65 @@ document.addEventListener('langchange', () => {
     return '<span class="fr-opp">—</span>';
   }
 
+  // Construit la coquille (titre + recherche + tableau vide) UNE seule fois : la
+  // barre de recherche survit ainsi aux re-render toutes les 30 s (seules les
+  // lignes #fr-body sont reconstruites).
+  function ensureShell() {
+    const wrap = document.getElementById('fr-wrap'); if (!wrap) return null;
+    if (wrap.querySelector('#fr-body')) return wrap;
+    const t = (k) => (window.t ? window.t(k) : k);
+    wrap.innerHTML =
+      '<div class="fr-head-block"><div class="fr-title">' + t('ranking_title')
+      + '<span class="fr-live-pill" id="fr-live-pill" style="display:none"><span class="dot"></span>' + t('ranking_live') + '</span>'
+      + '</div><div class="fr-sub">' + t('ranking_sub') + '</div></div>'
+      + '<div class="fr-search-wrap"><div class="filter-wrap"><span class="filter-icon">🔍</span>'
+      + '<input type="text" class="filter-input" id="fr-search" autocomplete="off" placeholder="' + t('ranking_search') + '"></div></div>'
+      + '<div class="fr-table"><div class="fr-colhead"><span>' + t('col_rank') + '</span><span>' + t('col_team')
+      + '</span><span class="c-match">' + t('col_matches') + '</span><span class="c-pts">' + t('col_points') + '</span></div>'
+      + '<div id="fr-body"></div></div>'
+      + '<div class="fr-empty" id="fr-empty" style="display:none">' + t('ranking_none') + '</div>'
+      + '<div class="fr-note">' + t('ranking_note') + '</div>';
+    const input = wrap.querySelector('#fr-search');
+    input.value = _query;
+    input.addEventListener('input', () => { _query = input.value; applyFilter(); });
+    return wrap;
+  }
+
+  function applyFilter() {
+    const body = document.getElementById('fr-body'); if (!body) return;
+    const q = norm(_query.trim());
+    let shown = 0;
+    body.querySelectorAll('.fr-row').forEach(row => {
+      const ok = !q || norm(row.getAttribute('data-name')).indexOf(q) !== -1;
+      row.style.display = ok ? '' : 'none';
+      if (ok) shown++;
+    });
+    const empty = document.getElementById('fr-empty');
+    if (empty) empty.style.display = (q && shown === 0) ? '' : 'none';
+  }
+
   function render() {
-    const wrap = document.getElementById('fr-wrap'); if (!wrap) return;
+    const wrap = ensureShell(); if (!wrap) return;
     const list = computed(), idx = matchIndex();
     const anyLive = Object.values(_all).some(e => { const c = e.competitions && e.competitions[0]; return c && c.status && c.status.type && c.status.type.state === 'in'; });
-    const t = (k) => (window.t ? window.t(k) : k);
-    const rows = list.map(r => {
+    const pill = document.getElementById('fr-live-pill'); if (pill) pill.style.display = anyLive ? '' : 'none';
+    document.getElementById('fr-body').innerHTML = list.map(r => {
       const out = !idx.last[r.fr] && !idx.next[r.fr];
       const mv = r.move > 0 ? '<span class="fr-move up">▲ ' + r.move + '</span>'
                : r.move < 0 ? '<span class="fr-move down">▼ ' + (-r.move) + '</span>'
                : '<span class="fr-move same">–</span>';
-      return '<div class="fr-row' + (out ? ' is-out' : '') + '">'
+      return '<div class="fr-row' + (out ? ' is-out' : '') + '" data-name="' + esc(r.fr) + '">'
         + '<div class="fr-rank"><span class="fr-pos">' + r.rank + '</span>' + mv + '</div>'
         + '<div class="fr-team"><img class="fr-flag" src="' + flag(r.iso, 80) + '" srcset="' + flag(r.iso, 160) + ' 2x" alt="" loading="lazy" onerror="this.style.visibility=\'hidden\'"><span class="fr-name">' + esc(r.fr) + '</span></div>'
         + '<div class="fr-match">' + matchCell(r.fr, idx) + '</div>'
         + '<div class="fr-pts">' + r.pts.toFixed(2) + '</div>'
         + '</div>';
     }).join('');
-    wrap.innerHTML =
-      '<div class="fr-head-block"><div class="fr-title">' + t('ranking_title')
-      + (anyLive ? '<span class="fr-live-pill"><span class="dot"></span>' + t('ranking_live') + '</span>' : '')
-      + '</div><div class="fr-sub">' + t('ranking_sub') + '</div></div>'
-      + '<div class="fr-table"><div class="fr-colhead"><span>' + t('col_rank') + '</span><span>' + t('col_team')
-      + '</span><span class="c-match">' + t('col_matches') + '</span><span class="c-pts">' + t('col_points') + '</span></div>'
-      + rows + '</div><div class="fr-note">' + t('ranking_note') + '</div>';
+    applyFilter();
   }
 
-  // re-render sur changement de langue + rendu initial (base 11 juin)
-  window.addEventListener('langchange', render);
+  // changement de langue → reconstruit la coquille (libellés) en gardant la recherche
+  window.addEventListener('langchange', () => { const w = document.getElementById('fr-wrap'); if (w) w.innerHTML = ''; render(); });
   if (document.readyState !== 'loading') render();
   else document.addEventListener('DOMContentLoaded', render);
 })();
