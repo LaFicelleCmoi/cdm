@@ -185,21 +185,30 @@ body {
 .live-team-logo { width: 32px; height: 32px; object-fit: contain; flex-shrink: 0; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.4)); }
 .live-team-name { flex: 1; font-size: 1em; font-weight: 600; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .live-card-teams { position: relative; }
-/* ============ SCORE ULTRA PREMIUM (façon scorebug TV) ============
-   Capsule biseautée verre/métal : dégradé + bevel (inset haut clair, bas
-   sombre) + reflet diagonal statique. AUCUNE animation continue. */
+/* terrain en filigrane : ligne médiane + rond central (ADN du site, très subtil) */
+.live-card-teams::before { content: ''; position: absolute; left: 6%; right: 6%; top: 50%; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07) 18% 82%, transparent); pointer-events: none; }
+.live-card-teams::after { content: ''; position: absolute; left: 50%; top: 50%; width: 22px; height: 22px;
+  transform: translate(-50%,-50%); border: 1px solid rgba(255,255,255,0.06); border-radius: 50%; pointer-events: none; }
+/* ============ SCORE ULTRA PREMIUM — DANS LE THÈME (pelouse + or) ============
+   Capsule « gazon » : verts du terrain + rayures de tonte (signature du fond du
+   site) + liseré OR + bevel + reflet statique. AUCUNE animation continue. */
 .live-team-score {
-  position: relative; overflow: hidden;
+  position: relative; overflow: hidden; z-index: 1;
   font-family: var(--font-d); font-size: 2em; line-height: 1; color: #fff;
   min-width: 1.7em; padding: 0.12em 0.24em 0.08em; text-align: center;
-  background: linear-gradient(180deg, rgba(255,255,255,0.09), rgba(10,17,24,0.6) 55%, rgba(0,0,0,0.42));
-  border: 1px solid rgba(255,255,255,0.15); border-radius: 0.16em;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.22), inset 0 -8px 14px rgba(0,0,0,0.4), 0 4px 12px rgba(0,0,0,0.4);
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.028) 0 6px, transparent 6px 12px),
+    linear-gradient(180deg, rgba(255,255,255,0.07), transparent 42%),
+    linear-gradient(180deg, #14351f, #0a2013 58%, #061409);
+  border: 1px solid rgba(251,197,49,0.38); border-radius: 0.16em;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -8px 14px rgba(0,0,0,0.45), 0 4px 12px rgba(0,0,0,0.4);
   transition: color 0.3s, transform 0.3s, box-shadow 0.3s, border-color 0.3s;
   font-variant-numeric: tabular-nums;
+  text-shadow: 0 2px 6px rgba(0,0,0,0.6);
 }
 .live-team-score::after { content: ''; position: absolute; top: 0; left: -34%; width: 58%; height: 100%;
-  background: linear-gradient(105deg, transparent, rgba(255,255,255,0.11) 45%, transparent 72%); pointer-events: none; }
+  background: linear-gradient(105deg, transparent, rgba(255,255,255,0.10) 45%, transparent 72%); pointer-events: none; }
 /* à venir : capsule invisible (le badge VS prend la scène) */
 .live-team-score.is-pre { background: none; border-color: transparent; box-shadow: none; }
 .live-team-score.is-pre::after { display: none; }
@@ -210,22 +219,29 @@ body {
 .live-card.state-post .live-team-score { color: #e8eef4; }
 .live-card.state-post .live-team-row.winner .live-team-score {
   color: #ffdf8e; text-shadow: 0 1px 0 rgba(90,60,0,0.6);
-  background: linear-gradient(180deg, rgba(251,197,49,0.24), rgba(122,86,12,0.28) 58%, rgba(20,12,0,0.4));
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.035) 0 6px, transparent 6px 12px),
+    linear-gradient(180deg, rgba(251,197,49,0.30), rgba(122,86,12,0.30) 58%, rgba(10,20,8,0.5)),
+    linear-gradient(180deg, #14351f, #081f12 60%, #061409);
   border-color: rgba(251,197,49,0.7);
   box-shadow: inset 0 1px 0 rgba(255,233,150,0.55), inset 0 -8px 14px rgba(0,0,0,0.38), 0 0 22px -4px rgba(251,197,49,0.6), 0 4px 12px rgba(0,0,0,0.4); }
 .live-card.state-post .live-card-teams:has(.winner) .live-team-row:not(.winner) { opacity: 0.55; }
 .live-card.state-post .live-card-teams:has(.winner) .live-team-row:not(.winner) .live-team-score { filter: saturate(0.6); }
-/* À VENIR : badge VS — texte en OR DÉGRADÉ (clip) dans un écrin verre + or */
-.live-vs { position: absolute; right: 0; top: 50%; transform: translateY(-50%);
+/* À VENIR : badge VS — or dégradé (clip) sur PLAQUE GAZON (rayures de tonte) */
+.live-vs { position: absolute; right: 0; top: 50%; transform: translateY(-50%); z-index: 1;
   font-family: var(--font-d); font-size: 1.2em; letter-spacing: 0.12em; padding: 6px 12px; border-radius: 12px;
   background: linear-gradient(180deg, #ffe9a8, #fbc531 55%, #d8a12e);
   -webkit-background-clip: text; background-clip: text; color: transparent;
   border: 1px solid rgba(251,197,49,0.55);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), inset 0 -8px 14px rgba(0,0,0,0.32), 0 4px 12px rgba(0,0,0,0.4), 0 0 18px -4px rgba(251,197,49,0.45); }
+.live-vs::before { content: ''; position: absolute; inset: 0; border-radius: inherit; z-index: -1;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0 5px, transparent 5px 10px),
+    linear-gradient(180deg, #143520, #081f12 65%, #051108); }
 .live-card.size-featured .live-vs { font-size: 1.6em; padding: 8px 15px; }
-/* Tirs au but : mini-capsule discrète sous les scores */
+/* Tirs au but : mini-capsule gazon + or sous les scores */
 .live-so { position: absolute; right: 0; bottom: -20px; font-size: 0.66em; font-weight: 800; letter-spacing: 0.04em;
-  color: #ffdf8e; background: rgba(0,0,0,0.4); border: 1px solid rgba(251,197,49,0.35); border-radius: 999px; padding: 2px 8px; }
+  color: #ffdf8e; background: linear-gradient(180deg, rgba(16,44,26,0.9), rgba(6,18,10,0.9)); border: 1px solid rgba(251,197,49,0.35); border-radius: 999px; padding: 2px 8px; }
 .live-team-score.bumped { animation: scoreBump 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
 @keyframes scoreBump { 0% { transform: scale(1); } 40% { transform: scale(1.45); box-shadow: inset 0 1px 0 rgba(255,255,255,0.3), 0 0 30px 2px rgba(251,197,49,0.75); } 100% { transform: scale(1); } }
 
