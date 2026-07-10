@@ -473,7 +473,10 @@ body::before {
 .fr-row { cursor: pointer; }
 .fr-res.live { background: var(--live, #ff4757); color: #fff; }
 /* Modale : 5 derniers matchs de l'équipe */
-.fr-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.72); -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); z-index: 300; align-items: center; justify-content: center; padding: 18px; }
+/* PERF : PAS de backdrop-filter blur ici — plein écran, il se recalcule à chaque
+   frame de ce qui bouge derrière (vidéo/stream) = gros lag. Fond opaque = même
+   effet de mise au point, coût nul. */
+.fr-modal-backdrop { display: none; position: fixed; inset: 0; background: rgba(3,8,6,0.86); z-index: 300; align-items: center; justify-content: center; padding: 18px; }
 .fr-modal-backdrop.open { display: flex; }
 .fr-modal { position: relative; width: 400px; max-width: 100%; max-height: 88vh; overflow-y: auto; background: var(--panel2, #10202f); border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; box-shadow: 0 30px 80px rgba(0,0,0,0.7); padding: 22px; animation: modalIn 0.22s ease; }
 .fr-modal-close { position: absolute; top: 12px; right: 12px; width: 34px; height: 34px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.06); color: #fff; font-size: 0.95em; cursor: pointer; transition: background 0.15s; }
