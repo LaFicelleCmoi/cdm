@@ -163,7 +163,9 @@ body {
 .live-card.size-small { padding: 16px 18px; gap: 10px; }
 .live-card.size-small .live-card-footer { font-size: 0.65em; }
 
-.live-card-status { display: flex; align-items: center; justify-content: space-between; font-size: 0.7em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
+/* gap : espace GARANTI entre « EN COURS » et la minute — sans lui, space-between
+   n'a rien à distribuer dans une carte étroite et les deux se collent. */
+.live-card-status { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 0.7em; font-weight: 700; letter-spacing: 0.1em; text-transform: uppercase; }
 .live-status-pill { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px; border-radius: 20px; font-size: 0.95em; }
 /* pastilles de statut SANS contour dur (le liseré rouge « en cours » faisait un
    rectangle cassé à petite échelle) : fond teinté + texte coloré + léger relief interne */
