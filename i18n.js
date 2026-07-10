@@ -49,6 +49,9 @@
       /* CDM nav / controls */
       nav_back: '← Retour au Dashboard',
       tab_groups: 'PHASE DE GROUPES', tab_planning: 'PLANNING POULES', tab_bracket: 'PHASE FINALE', tab_scorers: 'MEILLEURS BUTEURS',
+      tab_ranking: 'CLASSEMENT FIFA', ranking_title: 'Classement mondial FIFA', ranking_sub: 'Recalculé en direct à partir des résultats de la Coupe du Monde', ranking_live: 'En direct',
+      col_rank: 'Rang', col_team: 'Équipe', col_matches: 'Matchs', col_points: 'Points',
+      ranking_note: 'Formule officielle FIFA/Coca-Cola (SUM) appliquée aux résultats · Base : 11 juin 2026 · Les équipes hors Coupe du Monde gardent leurs points figés.',
       scorers_title: 'Meilleurs buteurs', scorers_sub: 'Coupe du Monde · classement de tous les temps', scorers_goals: 'buts',
       scorers_tab_alltime: 'Tous les temps', scorers_tab_live: 'Mondial 2026',
       scorers_live_sub: "Coupe du Monde 2026 · Soulier d'or en direct",
@@ -132,6 +135,9 @@
       /* CDM nav / controls */
       nav_back: '← Back to Dashboard',
       tab_groups: 'GROUP STAGE', tab_planning: 'GROUP SCHEDULE', tab_bracket: 'KNOCKOUT', tab_scorers: 'TOP SCORERS',
+      tab_ranking: 'FIFA RANKING', ranking_title: 'FIFA World Ranking', ranking_sub: 'Recomputed live from World Cup results', ranking_live: 'Live',
+      col_rank: 'Rank', col_team: 'Team', col_matches: 'Matches', col_points: 'Points',
+      ranking_note: 'Official FIFA/Coca-Cola formula (SUM) applied to results · Baseline: 11 June 2026 · Non–World Cup teams stay at their frozen points.',
       scorers_title: 'Top scorers', scorers_sub: 'World Cup · all-time ranking', scorers_goals: 'goals',
       scorers_tab_alltime: 'All-time', scorers_tab_live: '2026 World Cup',
       scorers_live_sub: '2026 World Cup · live Golden Boot',
