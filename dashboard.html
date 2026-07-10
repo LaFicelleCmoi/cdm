@@ -199,9 +199,12 @@ body {
 .live-team-score.bumped { animation: scoreBump 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
 @keyframes scoreBump { 0% { transform: scale(1); } 40% { transform: scale(1.45); } 100% { transform: scale(1); } }
 
-.live-card-footer { display: flex; align-items: center; justify-content: space-between; font-size: 0.7em; color: var(--muted); padding-top: 8px; border-top: 1px solid var(--border); }
-.live-venue { display: flex; align-items: center; gap: 4px; max-width: 70%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.live-kickoff { font-weight: 700; color: var(--white); }
+/* gap explicite : en colonne étroite (carte pleine largeur), space-between n'a plus
+   d'espace à distribuer et le stade venait se coller à l'heure (« Inglewood21:00 ») */
+.live-card-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 0.7em; color: var(--muted); padding-top: 8px; border-top: 1px solid var(--border); }
+.live-venue { display: flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; }
+.live-venue, .live-venue * { text-overflow: ellipsis; white-space: nowrap; }
+.live-kickoff { font-weight: 700; color: var(--white); flex-shrink: 0; }
 
 .live-empty, .live-error { text-align: center; padding: 30px 20px; color: var(--muted); font-size: 0.85em; border: 1px dashed var(--border); border-radius: 16px; background: rgba(0,0,0,0.2); }
 .live-error { color: rgba(255,71,87,0.8); border-color: rgba(255,71,87,0.3); }
