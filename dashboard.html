@@ -31,7 +31,7 @@
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="lanyard.js?v=2"></script>
+<script type="module" src="lanyard.js?v=3"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -434,11 +434,16 @@ body {
 @media (max-width: 640px) { .lanyard-stage { height: 320px; margin-top: -10px; } }
 /* Le bandeau prend les COULEURS de la sélection (team.color ESPN, posées en
    variables --fav-c1/--fav-c2/--fav-accent par renderFavHero) ; repli doré. */
-.fav-hero-card { position: relative; z-index: 2; display: flex; align-items: center; gap: 18px; max-width: 1100px; margin: 0 auto 0; padding: 16px 20px;
-  background: linear-gradient(120deg, color-mix(in srgb, var(--fav-c1, #fbc531) 16%, transparent), rgba(255,255,255,0.03) 52%, color-mix(in srgb, var(--fav-c2, #fbc531) 10%, transparent));
+.fav-hero-card { position: relative; z-index: 2; display: flex; align-items: center; gap: 18px; max-width: 1100px; margin: 0 auto 0; padding: 16px 20px 16px 32px;
+  background: linear-gradient(120deg, color-mix(in srgb, var(--fav-c1, #fbc531) 16%, transparent), rgba(255,255,255,0.03) 50%, color-mix(in srgb, var(--fav-c2, #fbc531) 15%, transparent));
   border: 1px solid color-mix(in srgb, var(--fav-accent, #fbc531) 42%, transparent);
   border-radius: 16px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.35), 0 0 26px -10px color-mix(in srgb, var(--fav-accent, #fbc531) 60%, transparent); }
+/* bande drapeau BICOLORE pleine opacité : c'est la 2e couleur qui distingue deux
+   pays au rouge identique (Espagne c60b1e/bordeaux vs Belgique E30613/bleu clair) */
+.fav-hero-card::before { content: ''; position: absolute; left: 11px; top: 12px; bottom: 12px; width: 7px; border-radius: 4px;
+  background: linear-gradient(180deg, var(--fav-c1, #fbc531) 0 50%, var(--fav-c2, var(--fav-c1, #fbc531)) 50% 100%);
+  box-shadow: 0 0 10px color-mix(in srgb, var(--fav-accent, #fbc531) 45%, transparent); }
 .fav-hero-flag img { width: 64px; height: 44px; object-fit: cover; border-radius: 6px; box-shadow: 0 3px 10px rgba(0,0,0,0.5); }
 .fav-hero-info { flex: 1; min-width: 0; }
 .fav-hero-label { font-size: 0.7em; font-weight: 800; letter-spacing: 0.12em; text-transform: uppercase; color: var(--fav-accent, var(--gold)); }
@@ -1383,6 +1388,7 @@ function syncLanyard() {
     roleLabel: window.t('lanyard_role'),
     groupLabel: window.t('fav_group'),
     serial: 'FWC-' + (ISO[FAV] || 'XX').toUpperCase() + '-26',
+    strapColors: teamColorsOf(FAV) || undefined, // cordon aux couleurs (si déjà connues)
     onClick: () => openCountryCard(FAV)
   });
   // enrichit le badge avec les données vivantes (sans reconstruire la scène 3D)
@@ -1392,6 +1398,8 @@ function syncLanyard() {
 // Lignes dynamiques du badge : rang mondial FIFA (recalculé en direct) + prochain match
 function lanyardExtra(lang) {
   const ex = {};
+  // cordon : couleurs de la sélection (arrivent souvent APRÈS le premier mount)
+  try { const c = teamColorsOf(FAV); if (c) ex.strapColors = c; } catch (_) {}
   try {
     const e = (window.FifaRanking && FifaRanking.get) ? FifaRanking.get(FAV) : null;
     if (e) ex.rankLine = (lang === 'en' ? (window.t('lanyard_world') + ' #' + e.rank) : ('#' + e.rank + ' ' + window.t('lanyard_world')))

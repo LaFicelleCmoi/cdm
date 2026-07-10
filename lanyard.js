@@ -212,23 +212,35 @@ import * as THREE from 'three';
     ctx.restore();
   }
 
-  // Texture du cordon (sangle) — motif tissé or/vert + petit texte répété
-  function makeStrapTexture(opts) {
-    const c = document.createElement('canvas'); c.width = 512; c.height = 64;
-    const x = c.getContext('2d');
-    const g = x.createLinearGradient(0, 0, 0, 64);
-    g.addColorStop(0, '#0b8f4e'); g.addColorStop(0.5, '#12b866'); g.addColorStop(1, '#0b8f4e');
-    x.fillStyle = g; x.fillRect(0, 0, 512, 64);
-    x.strokeStyle = 'rgba(0,0,0,0.12)'; x.lineWidth = 2;
-    for (let i = -64; i < 512; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + 64, 64); x.stroke(); }
-    x.fillStyle = 'rgba(255,255,255,0.92)';
+  // Texture du cordon (sangle). colors = { c1, c2 } (couleurs de la sélection)
+  // → écharpe à DEUX BANDES le long du cordon ; sinon vert/or CDM par défaut.
+  function drawStrap(cnv, colors) {
+    const x = cnv.getContext('2d');
+    const W = cnv.width, H = cnv.height;
+    x.clearRect(0, 0, W, H);
+    const c1 = (colors && colors.c1) || '#0b8f4e';
+    const c2 = (colors && colors.c2) || '#12b866';
+    // l'axe X de la texture traverse la LARGEUR du cordon → 2 bandes côte à côte
+    x.fillStyle = c1; x.fillRect(0, 0, W / 2, H);
+    x.fillStyle = c2; x.fillRect(W / 2, 0, W / 2, H);
+    // tissage diagonal
+    x.strokeStyle = 'rgba(0,0,0,0.14)'; x.lineWidth = 2;
+    for (let i = -H; i < W; i += 16) { x.beginPath(); x.moveTo(i, 0); x.lineTo(i + H, H); x.stroke(); }
+    // texte décoratif — couleur adaptée à la luminosité des bandes
+    const luma = (h) => { if (!/^#/.test(h)) return 128; const n = parseInt(h.slice(1), 16); return 0.299 * (n >> 16 & 255) + 0.587 * (n >> 8 & 255) + 0.114 * (n & 255); };
+    const bright = (luma(c1) + luma(c2)) / 2 > 150;
+    x.fillStyle = bright ? 'rgba(12,22,34,0.85)' : 'rgba(255,255,255,0.92)';
     x.textAlign = 'center'; x.textBaseline = 'middle';
     x.font = "800 26px 'Inter',Arial,sans-serif";
-    x.fillText('★ CDM 2026 ★ CDM 2026', 256, 34);
+    x.fillText('★ CDM 2026 ★ CDM 2026', W / 2, H / 2 + 2);
+  }
+  function makeStrapTexture(colors) {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 64;
+    drawStrap(c, colors);
     const t = new THREE.CanvasTexture(c);
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.anisotropy = 8;
-    return t;
+    return { tex: t, cnv: c };
   }
 
   // ======================================================= CHARGEMENT DRAPEAU
@@ -308,7 +320,8 @@ import * as THREE from 'three';
     cardGroup.add(hit);
 
     // ---- cordon (ruban) ----
-    const strapTex = makeStrapTexture(opts);
+    const strap0 = makeStrapTexture(opts.strapColors || null);
+    const strapTex = strap0.tex;
     const M = 24;                    // nb d'échantillons le long du ruban
     const strapGeo = new THREE.BufferGeometry();
     const posArr = new Float32Array(M * 2 * 3);
@@ -343,6 +356,7 @@ import * as THREE from 'three';
     S = {
       country: opts.country, key: opts.key || opts.country, opts, stage, renderer, scene, camera, canvas,
       cardGroup, frontMesh, hit, strap, strapGeo, posArr, curvePts: null,
+      strapCnv: strap0.cnv, strapTex: strap0.tex,
       frontTex, front, P, T, B,
       raycaster: new THREE.Raycaster(), ndc: new THREE.Vector2(),
       dragging: false, grabTop: null, calm: 0, active: false, raf: 0,
@@ -635,6 +649,11 @@ import * as THREE from 'three';
     Object.assign(S.opts, extra);
     drawBadge(S.front, S.opts, S.flagImg || null);
     S.frontTex.needsUpdate = true;
+    // cordon aux couleurs de la sélection (null → livrée verte CDM par défaut)
+    if ('strapColors' in extra && S.strapCnv) {
+      drawStrap(S.strapCnv, extra.strapColors);
+      S.strapTex.needsUpdate = true;
+    }
     renderOnce();
   }
 
