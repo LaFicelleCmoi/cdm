@@ -25,7 +25,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="i18n.js?v=27"></script>
+<script src="i18n.js?v=28"></script>
 <script src="events.js?v=3"></script>
 <script src="fifa-ranking.js?v=2"></script>
 <!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
@@ -431,9 +431,15 @@ body {
 .ldn-sub { color: var(--muted); font-size: 0.85em; margin: -10px 0 16px; }
 .ldn-fx-wrap { background: rgba(15,25,35,0.7); border: 1px solid var(--border); border-radius: 18px; padding: 14px 18px; margin-bottom: 16px; }
 .ldn-fx-head { font-size: 0.68em; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; color: var(--gold); margin-bottom: 10px; }
-.ldn-fixtures { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 6px 26px; }
+.ldn-fixtures { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 6px 26px; }
 .ldn-fx { display: flex; align-items: center; gap: 8px; font-size: 0.85em; padding: 4px 0; border-bottom: 1px dashed rgba(255,255,255,0.07); }
-.ldn-fx-time { font-family: var(--font-d); color: var(--gold); min-width: 44px; font-variant-numeric: tabular-nums; }
+/* pastille de ligue (A/B/C/D) : le contexte de chaque affiche, colorée par division */
+.ldn-fx-grp { flex-shrink: 0; min-width: 36px; text-align: center; font-size: 0.68em; font-weight: 800; letter-spacing: 0.04em; padding: 2px 7px; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.ldn-fx-grp.lg-A { color: var(--gold); background: rgba(251,197,49,0.15); }
+.ldn-fx-grp.lg-B { color: #b8c9da; background: rgba(159,180,200,0.16); }
+.ldn-fx-grp.lg-C { color: #d29a5e; background: rgba(205,127,50,0.15); }
+.ldn-fx-grp.lg-D { color: #98a8b5; background: rgba(255,255,255,0.08); }
+.ldn-fx-time { flex-shrink: 0; font-family: var(--font-d); color: var(--muted); font-size: 0.92em; min-width: 40px; text-align: right; font-variant-numeric: tabular-nums; }
 .ldn-fx img { width: 20px; height: 13px; object-fit: cover; border-radius: 2px; flex-shrink: 0; }
 .ldn-fx-team { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--white); font-weight: 600; }
 .ldn-fx-team.home { justify-content: flex-end; }
@@ -1577,20 +1583,30 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
       const list = document.getElementById('ldn-fixtures');
       if (!evs.length || !list) return;
       const firstDay = (evs[0].date || '').slice(0, 10);
-      const day = evs.filter(e => (e.date || '').slice(0, 10) === firstDay);
       const lang = (window.getLang && window.getLang()) || 'fr';
       const when = HAS_DAYJS ? dayjs(firstDay).locale(lang === 'en' ? 'en' : 'fr').format(lang === 'en' ? 'dddd, MMMM D YYYY' : 'dddd D MMMM YYYY') : firstDay;
       const dateEl = document.getElementById('ldn-fixtures-date');
-      if (dateEl) dateEl.textContent = when;
-      list.innerHTML = day.map(e => {
+      if (dateEl) dateEl.textContent = when + ' · ' + window.t('ldn_paris');
+      // groupe de chaque affiche (déduit du tirage) → tri Ligue A d'abord, puis n° de groupe
+      const grpOf = (fr) => { for (const [lg, num, teams] of LDN_GROUPS) { if (teams.includes(fr)) return { lg, num }; } return null; };
+      const day = evs.filter(e => (e.date || '').slice(0, 10) === firstDay).map(e => {
         const cs = e.competitions[0].competitors;
         const h = cs.find(c => c.homeAway === 'home') || cs[0], a = cs.find(c => c.homeAway === 'away') || cs[1];
         const hn = frName(h.team.displayName), an = frName(a.team.displayName);
-        const time = HAS_DAYJS ? dayjs(e.date).tz(PARIS_TZ).format('HH:mm') : '';
-        return `<div class="ldn-fx"><span class="ldn-fx-time">${time}</span>`
-          + `<span class="ldn-fx-team home">${escapeHTML(hn)} ${fImg(hn, 40)}</span>`
+        return { hn, an, g: grpOf(hn) || grpOf(an), time: HAS_DAYJS ? dayjs(e.date).tz(PARIS_TZ).format('HH:mm') : '' };
+      }).sort((x, y) => {
+        const gx = x.g ? x.g.lg + x.g.num : 'Z9', gy = y.g ? y.g.lg + y.g.num : 'Z9';
+        return gx < gy ? -1 : gx > gy ? 1 : 0;
+      });
+      list.innerHTML = day.map(m => {
+        const chip = m.g
+          ? `<span class="ldn-fx-grp lg-${m.g.lg}" title="${window.t('ldn_league')} ${m.g.lg} · ${window.t('group')} ${m.g.num}">${m.g.lg}·${m.g.num}</span>`
+          : '<span class="ldn-fx-grp lg-D">—</span>';
+        return `<div class="ldn-fx">${chip}`
+          + `<span class="ldn-fx-team home">${escapeHTML(m.hn)} ${fImg(m.hn, 40)}</span>`
           + `<span class="ldn-fx-sep">–</span>`
-          + `<span class="ldn-fx-team">${fImg(an, 40)} ${escapeHTML(an)}</span></div>`;
+          + `<span class="ldn-fx-team">${fImg(m.an, 40)} ${escapeHTML(m.an)}</span>`
+          + `<span class="ldn-fx-time">${m.time}</span></div>`;
       }).join('');
       document.getElementById('ldn-fixtures-wrap').style.display = '';
     })
