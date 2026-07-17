@@ -24,6 +24,8 @@
 
   var auto = Date.now() >= WC_LIVE_END ? 'ldn' : 'wc';
   var mode = qp || stored || auto;
+  // marqueur global pour le CSS des pages (ex : onglets du tracker par compétition)
+  try { document.documentElement.dataset.comp = mode; } catch (e) {}
 
   function set(m) {
     if ((m !== 'wc' && m !== 'ldn') || m === mode) return;

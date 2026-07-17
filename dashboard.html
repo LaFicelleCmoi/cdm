@@ -25,7 +25,8 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="competition.js?v=1"></script>
+<script src="ldn-data.js?v=1"></script>
+<script src="competition.js?v=2"></script>
 <script src="i18n.js?v=31"></script>
 <script src="events.js?v=3"></script>
 <script src="fifa-ranking.js?v=2"></script>
@@ -1572,23 +1573,9 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
 (function buildLdn() {
   const grid = document.getElementById('ldn-groups-grid');
   if (!grid) return;
-  // [ligue, n° de groupe, équipes (noms FR — TEAM_ISO fournit les drapeaux)]
-  const LDN_GROUPS = [
-    ['A', 1, ['France', 'Italie', 'Belgique', 'Turquie']],
-    ['A', 2, ['Allemagne', 'Pays-Bas', 'Serbie', 'Grèce']],
-    ['A', 3, ['Espagne', 'Croatie', 'Angleterre', 'Tchéquie']],
-    ['A', 4, ['Portugal', 'Danemark', 'Norvège', 'Pays de Galles']],
-    ['B', 1, ['Écosse', 'Suisse', 'Slovénie', 'Macédoine du Nord']],
-    ['B', 2, ['Hongrie', 'Ukraine', 'Géorgie', 'Irlande du Nord']],
-    ['B', 3, ['Israël', 'Autriche', 'Irlande', 'Kosovo']],
-    ['B', 4, ['Pologne', 'Bosnie-Herzégovine', 'Roumanie', 'Suède']],
-    ['C', 1, ['Albanie', 'Finlande', 'Biélorussie', 'Saint-Marin']],
-    ['C', 2, ['Monténégro', 'Arménie', 'Chypre', 'Lettonie']],
-    ['C', 3, ['Kazakhstan', 'Slovaquie', 'Îles Féroé', 'Moldavie']],
-    ['C', 4, ['Islande', 'Bulgarie', 'Estonie', 'Luxembourg']],
-    ['D', 1, ['Azerbaïdjan', 'Lituanie', 'Liechtenstein']],
-    ['D', 2, ['Malte', 'Gibraltar', 'Andorre']]
-  ];
+  if (!window.LDN_DATA) return; // module partagé requis (ldn-data.js)
+  // tirage partagé avec le tracker — [ligue, n°, équipes FR] (voir ldn-data.js)
+  const LDN_GROUPS = window.LDN_DATA.GROUPS;
   const isoOf = (n) => (window.TEAM_ISO && window.TEAM_ISO[n]) || '';
   const flagLdn = (n, w) => isoOf(n) ? `https://flagcdn.com/w${w}/${isoOf(n)}.png` : '';
   const fImg = (n, w) => flagLdn(n, w) ? `<img src="${flagLdn(n, w)}" srcset="${flagLdn(n, w * 2)} 2x" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">` : '';
@@ -1598,31 +1585,9 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
     flag: flagLdn, events: [], standings: null
   };
 
-  // Classement d'un groupe calculé depuis les résultats ESPN (matchs terminés).
-  // Pas de tirs au but en phase de ligue → nuls autorisés. 3/1/0 pts.
-  function computeLdnStandings(events) {
-    const T = {};
-    LDN_GROUPS.forEach(([lg, num, teams]) => teams.forEach(t => { T[t] = { p:0, w:0, d:0, l:0, gf:0, ga:0, pts:0 }; }));
-    (events || []).forEach(e => {
-      const c = e.competitions && e.competitions[0]; if (!c || !c.status || c.status.type.state !== 'post') return;
-      const cs = c.competitors || []; if (cs.length < 2 || !cs[0].team || !cs[1].team) return;
-      const frA = frName(cs[0].team.displayName), frB = frName(cs[1].team.displayName);
-      const sA = parseInt(cs[0].score), sB = parseInt(cs[1].score);
-      if (isNaN(sA) || isNaN(sB) || !(frA in T) || !(frB in T)) return;
-      const a = T[frA], b = T[frB];
-      a.p++; b.p++; a.gf += sA; a.ga += sB; b.gf += sB; b.ga += sA;
-      if (sA > sB) { a.w++; a.pts += 3; b.l++; }
-      else if (sA < sB) { b.w++; b.pts += 3; a.l++; }
-      else { a.d++; b.d++; a.pts++; b.pts++; }
-    });
-    return LDN_GROUPS.map(([lg, num, teams]) => {
-      const played = teams.some(t => T[t].p > 0);
-      const rows = teams.map(t => ({ fr: t, p: T[t].p, gd: T[t].gf - T[t].ga, gf: T[t].gf, pts: T[t].pts }));
-      // avant le 1er match : ordre du tirage ; sinon Pts › différence › BM › alpha
-      if (played) rows.sort((x, y) => y.pts - x.pts || y.gd - x.gd || y.gf - x.gf || x.fr.localeCompare(y.fr, 'fr'));
-      return { lg, num, played, rows };
-    });
-  }
+  // Classement calculé par le module partagé (ldn-data.js) : 3/1/0 pts,
+  // matchs terminés uniquement, tri Pts › différence › BM › alpha.
+  const computeLdnStandings = window.LDN_DATA.standings;
 
   function renderLdnGroups(standings) {
     grid.innerHTML = LDN_GROUPS.map(([lg, num, teams], gi) => {

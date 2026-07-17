@@ -24,8 +24,9 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="competition.js?v=1"></script>
-<script src="i18n.js?v=29"></script>
+<script src="ldn-data.js?v=1"></script>
+<script src="competition.js?v=2"></script>
+<script src="i18n.js?v=30"></script>
 <script src="events.js?v=3"></script>
 <script src="fifa-ranking.js?v=2"></script>
 <style>
@@ -193,6 +194,26 @@ body::before {
 .standings td:first-child { text-align: left; padding-left: 14px; font-weight: 600; }
 .standings td:last-child { text-align: right; padding-right: 14px; }
 .standings tbody tr:last-child td { border-bottom: none; }
+
+/* === Mode Ligue des Nations (toggle 🇪🇺 Nations) === */
+html:not([data-comp="ldn"]) .nav-tab[data-comp="ldn"] { display: none !important; }
+html[data-comp="ldn"] .nav-tab[data-comp="wc"] { display: none !important; }
+.ldn-head-A { background: linear-gradient(135deg, #8a6d00, #c29a00); }
+.ldn-head-B { background: linear-gradient(135deg, #2e4a68, #4e7aa5); }
+.ldn-head-C { background: linear-gradient(135deg, #6e4a24, #9c6a33); }
+.ldn-head-D { background: linear-gradient(135deg, #39424f, #57636f); }
+.ldn-flag { width: 20px; height: 14px; object-fit: cover; border-radius: 2px; box-shadow: 0 1px 4px rgba(0,0,0,0.45); vertical-align: middle; }
+.ldn-top td { background: rgba(46,213,115,0.05); }
+.ldn-drop td { background: rgba(255,71,87,0.05); }
+.group-tag-pill.lg-A { background: rgba(251,197,49,0.14); color: var(--gold); }
+.group-tag-pill.lg-B { background: rgba(96,163,255,0.14); color: #7db4ff; }
+.group-tag-pill.lg-C { background: rgba(205,127,50,0.16); color: #e0a066; }
+.group-tag-pill.lg-D { background: rgba(255,255,255,0.08); color: var(--muted); }
+.ldn-cal-card { cursor: default; }
+.ldn-cal-card .p-t-name.ldn-win { color: var(--gold); }
+.ldn-cal-live { color: var(--live, #ff4757); font-weight: 800; animation: pulse-live 1.6s infinite; }
+.ldn-day-note { font-size: 0.72em; color: var(--muted); font-weight: 600; letter-spacing: 0.04em; }
+.ldn-cal-empty { text-align: center; color: var(--muted); padding: 40px 0; }
 
 .rank-badge { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 50%; font-size: 0.68em; font-weight: 800; margin-right: 8px; vertical-align: middle; flex-shrink: 0; }
 .r1 .rank-badge { background: var(--gold); color: #000; }
@@ -604,17 +625,23 @@ body::before {
 
 <div class="nav-tabs" id="nav-tabs">
   <div class="nav-tab-indicator" id="nav-tab-indicator"></div>
-  <button class="nav-tab" onclick="showSection('groups',this)">
+  <button class="nav-tab" data-comp="wc" onclick="showSection('groups',this)">
     <span class="nav-tab-icon">🏟</span> <span data-i18n="tab_groups">PHASE DE GROUPES</span>
   </button>
-  <button class="nav-tab" onclick="showSection('planning-poules',this)">
+  <button class="nav-tab" data-comp="wc" onclick="showSection('planning-poules',this)">
     <span class="nav-tab-icon">📅</span> <span data-i18n="tab_planning">PLANNING POULES</span>
   </button>
-  <button class="nav-tab active" onclick="showSection('bracket',this)">
+  <button class="nav-tab active" data-comp="wc" onclick="showSection('bracket',this)">
     <span class="nav-tab-icon">⚔</span> <span data-i18n="tab_bracket">PHASE FINALE</span>
   </button>
-  <button class="nav-tab" onclick="showSection('scorers',this)">
+  <button class="nav-tab" data-comp="wc" onclick="showSection('scorers',this)">
     <span class="nav-tab-icon">🥇</span> <span data-i18n="tab_scorers">MEILLEURS BUTEURS</span>
+  </button>
+  <button class="nav-tab" data-comp="ldn" onclick="showSection('ldn-groups',this)">
+    <span class="nav-tab-icon">🏟</span> <span data-i18n="tab_ldn_groups">GROUPES & LIGUES</span>
+  </button>
+  <button class="nav-tab" data-comp="ldn" onclick="showSection('ldn-cal',this)">
+    <span class="nav-tab-icon">📅</span> <span data-i18n="tab_ldn_cal">CALENDRIER</span>
   </button>
   <button class="nav-tab" onclick="showSection('ranking',this)">
     <span class="nav-tab-icon">🌍</span> <span data-i18n="tab_ranking">CLASSEMENT FIFA</span>
@@ -645,6 +672,15 @@ body::before {
 
 <div class="section" id="sec-ranking">
   <div class="fr-wrap" id="fr-wrap"></div>
+</div>
+
+<!-- Mode Ligue des Nations (toggle 🇪🇺) : groupes + calendrier -->
+<div class="section" id="sec-ldn-groups">
+  <div class="groups-grid" id="ldn-groups-container"></div>
+</div>
+
+<div class="section" id="sec-ldn-cal">
+  <div class="planning-poule-wrap" id="ldn-cal-wrap"></div>
 </div>
 
 <div class="section visible" id="sec-bracket">
@@ -747,11 +783,15 @@ function formatPlanningDate(frStr) {
   return lang === 'en' ? d.locale('en').format('dddd, MMMM D') : d.locale('fr').format('dddd D MMMM');
 }
 
-/* === SplitText — WORLD CUP 2026 letter by letter === */
+/* === SplitText — titre lettre à lettre (WORLD CUP 2026 / NATIONS LEAGUE) === */
 (function splitHero() {
   const target = document.getElementById('hero-title');
   if (!target) return;
-  const lines = [
+  const lines = (window.COMP && window.COMP.mode === 'ldn') ? [
+    { text: 'NATIONS', cls: '', br: true },
+    { text: 'LEAGUE', cls: 'gold', br: false },
+    { text: '26-27', cls: '', br: false, leadingGap: true }
+  ] : [
     { text: 'WORLD', cls: '', br: true },
     { text: 'CUP', cls: 'gold', br: false },
     { text: '2026', cls: '', br: false, leadingGap: true }
@@ -771,6 +811,133 @@ function formatPlanningDate(frStr) {
     target.appendChild(wrap);
     if (line.br) target.appendChild(document.createElement('br'));
   });
+})();
+
+/* === Mode Ligue des Nations : le tracker se consacre à la LdN 2026-27.
+   Groupes (cartes classement, style poules CDM) + calendrier complet des
+   156 matchs (heure de Paris). Les sections CDM restent intactes (onglets
+   masqués par CSS) ; le classement FIFA reste dispo dans les deux modes. === */
+(function buildLdnTracker() {
+  if (!(window.COMP && window.COMP.mode === 'ldn') || !window.LDN_DATA) return;
+  const D = window.LDN_DATA;
+  document.title = 'Tracker — Ligue des Nations 2026-27';
+
+  // section + onglet par défaut : les groupes LdN (le bracket est réservé à la CDM)
+  const secB = document.getElementById('sec-bracket'), secG = document.getElementById('sec-ldn-groups');
+  if (secB) secB.classList.remove('visible');
+  if (secG) secG.classList.add('visible');
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  const defTab = document.querySelector('.nav-tab[data-comp="ldn"]');
+  if (defTab) defTab.classList.add('active');
+
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const iso = (n) => (window.TEAM_ISO && window.TEAM_ISO[n]) || '';
+  const flag = (n, w) => iso(n)
+    ? `<img class="ldn-flag" src="https://flagcdn.com/w${w}/${iso(n)}.png" srcset="https://flagcdn.com/w${w * 2}/${iso(n)}.png 2x" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">`
+    : '🏳';
+
+  /* ---- groupes : cartes classement (mêmes styles que les poules CDM) ---- */
+  function renderLdnGroupCards(stand) {
+    const cont = document.getElementById('ldn-groups-container');
+    if (!cont) return;
+    cont.innerHTML = D.GROUPS.map(([lg, num, teams], gi) => {
+      const st = stand && stand[gi];
+      const played = st ? st.played : false;
+      const rows = st ? st.rows : teams.map(fr => ({ fr, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 }));
+      const body = rows.map((r, i) => {
+        // 1er = tête de groupe (vert) ; dernier d'un groupe de 4 = relégation (rouge)
+        const zone = played ? (i === 0 ? ' ldn-top' : (i === rows.length - 1 && rows.length >= 4 ? ' ldn-drop' : '')) : '';
+        return `<tr class="r${i + 1}${zone}">
+          <td><div class="team-name-cell"><span class="rank-badge">${i + 1}</span><span class="p-flag" style="margin:0;">${flag(r.fr, 40)}</span><span class="team-name-text">${esc(r.fr)}</span></div></td>
+          <td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td>${r.gd > 0 ? '+' + r.gd : r.gd}</td><td class="pts-cell">${r.pts}</td>
+        </tr>`;
+      }).join('');
+      return `<div class="group-card">
+        <div class="group-card-header ldn-head-${lg}">
+          <div class="group-card-title"><span data-i18n="ldn_league">Ligue</span> ${lg} · <span data-i18n="group_word">GROUPE</span> ${num}</div>
+          <div class="group-card-sub" data-i18n="group_sub_locked">🔒 Scores live (API)</div>
+        </div>
+        <table class="standings">
+          <thead><tr>
+            <th data-i18n="th_team">Équipe</th><th data-i18n="th_mp">MJ</th><th data-i18n="th_w">G</th><th data-i18n="th_d">N</th><th data-i18n="th_l">P</th><th data-i18n="th_gf">BP</th><th data-i18n="th_ga">BC</th><th data-i18n="th_gd">DB</th><th data-i18n="th_pts">Pts</th>
+          </tr></thead>
+          <tbody>${body}</tbody>
+        </table>
+      </div>`;
+    }).join('');
+  }
+
+  /* ---- calendrier complet groupé par jour (heure de Paris) ---- */
+  let LDN_EVS = [];
+  function renderLdnCalendar() {
+    const wrap = document.getElementById('ldn-cal-wrap');
+    if (!wrap) return;
+    if (!LDN_EVS.length) { wrap.innerHTML = `<div class="ldn-cal-empty">${window.t('ldn_cal_wait')}</div>`; return; }
+    const lang = (window.getLang && window.getLang()) || 'fr';
+    const loc = lang === 'en' ? 'en-GB' : 'fr-FR';
+    const keyFmt = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Paris', year: 'numeric', month: '2-digit', day: '2-digit' });
+    const dayFmt = new Intl.DateTimeFormat(loc, { timeZone: 'Europe/Paris', weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+    const timeFmt = new Intl.DateTimeFormat(loc, { timeZone: 'Europe/Paris', hour: '2-digit', minute: '2-digit' });
+    const days = new Map(); // insertion = ordre chrono (LDN_EVS déjà trié)
+    LDN_EVS.forEach(e => {
+      const dk = keyFmt.format(new Date(e.date));
+      if (!days.has(dk)) days.set(dk, []);
+      days.get(dk).push(e);
+    });
+    wrap.innerHTML = Array.from(days.entries()).map(([dk, evs]) => {
+      const cards = evs.map(e => {
+        const c = e.competitions[0], cs = c.competitors;
+        const h = cs.find(x => x.homeAway === 'home') || cs[0], a = cs.find(x => x.homeAway === 'away') || cs[1];
+        const hn = D.frName(h.team.displayName), an = D.frName(a.team.displayName);
+        const g = D.groupOf(hn) || D.groupOf(an);
+        const state = c.status && c.status.type ? c.status.type.state : 'pre';
+        const chip = g ? `<span class="group-tag-pill lg-${g.lg}">${window.t('ldn_league')} ${g.lg} · G${g.num}</span>` : `<span class="group-tag-pill">—</span>`;
+        const sh = parseInt(h.score, 10), sa = parseInt(a.score, 10);
+        let meta, mid, hCls = '', aCls = '';
+        if (state === 'post') {
+          meta = `<div class="match-p-time">${window.t('ldn_ft')}</div>`;
+          mid = `<span class="p-score-val">${isNaN(sh) ? '' : sh}</span><span class="p-vs">–</span><span class="p-score-val">${isNaN(sa) ? '' : sa}</span>`;
+          if (!isNaN(sh) && !isNaN(sa)) { if (sh > sa) hCls = ' ldn-win'; else if (sa > sh) aCls = ' ldn-win'; }
+        } else if (state === 'in') {
+          meta = `<div class="match-p-time ldn-cal-live">🔴 ${esc(c.status.displayClock || 'LIVE')}</div>`;
+          mid = `<span class="p-score-val">${isNaN(sh) ? 0 : sh}</span><span class="p-vs">–</span><span class="p-score-val">${isNaN(sa) ? 0 : sa}</span>`;
+        } else {
+          meta = `<div class="match-p-time">${timeFmt.format(new Date(e.date))}</div>`;
+          mid = `<span class="p-vs">VS</span>`;
+        }
+        return `<div class="poule-match-card ldn-cal-card">
+          <div class="match-p-meta">${chip}${meta}</div>
+          <div class="match-p-teams">
+            <span class="p-flag">${flag(hn, 40)}</span>
+            <span class="p-t-name right${hCls}">${esc(hn)}</span>
+            ${mid}
+            <span class="p-t-name left${aCls}">${esc(an)}</span>
+            <span class="p-flag">${flag(an, 40)}</span>
+          </div>
+        </div>`;
+      }).join('');
+      return `<div class="day-block">
+        <div class="day-header"><div class="day-date">${dayFmt.format(new Date(dk + 'T12:00:00Z'))}</div><div class="ldn-day-note">${evs.length} ${window.t('ldn_matches')} · ${window.t('ldn_paris')}</div></div>
+        <div class="day-match-grid">${cards}</div>
+      </div>`;
+    }).join('');
+  }
+
+  renderLdnGroupCards(null); // tirage immédiat (points à zéro, sans API)
+  // phase de ligue : 24/09 → 17/11/2026 (une seule requête pour tout le calendrier)
+  fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?dates=20260924-20261117&limit=500', { cache: 'no-store' })
+    .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+    .then(data => {
+      LDN_EVS = (data.events || [])
+        .filter(e => e && e.competitions && e.competitions[0] && (e.competitions[0].competitors || []).length >= 2
+          && e.competitions[0].competitors.every(x => x && x.team))
+        .sort((a, b) => new Date(a.date) - new Date(b.date));
+      renderLdnGroupCards(D.standings(LDN_EVS));
+      renderLdnCalendar();
+      if (window.applyLang && window.getLang) window.applyLang(window.getLang());
+    })
+    .catch(err => { console.warn('LdN tracker:', err); renderLdnCalendar(); });
+  window.addEventListener('langchange', renderLdnCalendar); // dates/heures relocalisées
 })();
 
 /* === Toast notifications === */
