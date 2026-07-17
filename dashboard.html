@@ -25,7 +25,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="i18n.js?v=29"></script>
+<script src="i18n.js?v=30"></script>
 <script src="events.js?v=3"></script>
 <script src="fifa-ranking.js?v=2"></script>
 <!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
@@ -460,6 +460,8 @@ body {
 .ldn-st-row.is-top .ldn-st-rank { color: var(--green-b, #2ed573); font-weight: 800; }
 .ldn-st-row.is-drop { background: rgba(255,71,87,0.07); box-shadow: inset 2px 0 0 var(--red); }
 .ldn-st-row.is-drop .ldn-st-rank { color: var(--red); }
+.ldn-st-row.is-click { cursor: pointer; transition: background 0.12s; }
+.ldn-st-row.is-click:hover { background: rgba(255,255,255,0.06); }
 .ldn-legend { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin-top: 14px; font-size: 0.72em; color: var(--muted); }
 .ldn-legend .ldn-lg-key { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
 .ldn-legend .ldn-lg-key.up { background: var(--green-b, #2ed573); margin-left: 10px; }
@@ -662,6 +664,7 @@ body {
 .pc-status:empty { display: none; }
 .pc-status.is-alive { color: #04220f; background: linear-gradient(180deg, #3ee07a, #16a34a); box-shadow: 0 0 16px rgba(34,197,94,0.45); }
 .pc-status.is-out { color: #fff; background: linear-gradient(180deg, #ff6b6b, #d63031); box-shadow: 0 0 16px rgba(214,48,49,0.45); }
+.pc-status.is-mid { color: #0b1622; background: linear-gradient(180deg, #ffe08a, #fbc531); box-shadow: 0 0 16px rgba(251,197,49,0.35); } /* fiche LdN : en course / à venir */
 
 @media (max-width: 600px) {
   .nav-forward { position: relative; display: block; width: max-content; margin: 0 auto 30px; right: 0; }
@@ -1586,6 +1589,11 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
   const isoOf = (n) => (window.TEAM_ISO && window.TEAM_ISO[n]) || '';
   const flagLdn = (n, w) => isoOf(n) ? `https://flagcdn.com/w${w}/${isoOf(n)}.png` : '';
   const fImg = (n, w) => flagLdn(n, w) ? `<img src="${flagLdn(n, w)}" srcset="${flagLdn(n, w * 2)} 2x" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">` : '';
+  // exposé pour la fiche équipe LdN (openLdnCard) — groupe, drapeau, résultats, classement
+  window.LDN = {
+    groupOf(fr) { for (const [lg, num, teams] of LDN_GROUPS) if (teams.includes(fr)) return { lg, num, teams }; return null; },
+    flag: flagLdn, events: [], standings: null
+  };
 
   // Classement d'un groupe calculé depuis les résultats ESPN (matchs terminés).
   // Pas de tirs au but en phase de ligue → nuls autorisés. 3/1/0 pts.
@@ -1624,7 +1632,7 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
         // 1er = tête de groupe (vert) ; dernier d'un groupe de 4 = relégation (rouge)
         const zone = played ? (rank === 1 ? ' is-top' : (rank === size && size >= 4 ? ' is-drop' : '')) : '';
         const gd = r.gd > 0 ? '+' + r.gd : String(r.gd);
-        return `<div class="ldn-st-row${zone}">`
+        return `<div class="ldn-st-row is-click${zone}" data-team="${escFav(r.fr)}">`
           + `<span class="ldn-st-rank">${rank}</span>`
           + `<span class="ldn-st-team">${fImg(r.fr, 40)}<span>${escapeHTML(r.fr)}</span></span>`
           + `<span class="ldn-st-p">${played ? r.p : '–'}</span>`
@@ -1641,6 +1649,11 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
 
   renderLdnGroups(null);   // tirage immédiat (sans API)
   window._ldnStandings = computeLdnStandings; // crochet de vérification
+  // clic sur une ligne → fiche équipe LdN (même carte à paillettes que la CDM)
+  grid.addEventListener('click', (e) => {
+    const row = e.target.closest('.ldn-st-row[data-team]');
+    if (row && window.openLdnCard) openLdnCard(row.dataset.team);
+  });
 
   // premiers matchs (1re journée) depuis ESPN — dégrade proprement si l'API échoue
   fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?dates=20260924-20261117&limit=500', { cache: 'no-store', signal: tmo(12000) })
@@ -1650,7 +1663,9 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
         .filter(e => e && e.competitions && e.competitions[0] && (e.competitions[0].competitors || []).length >= 2
           && e.competitions[0].competitors.every(c => c && c.team))
         .sort((a, b) => new Date(a.date) - new Date(b.date));
-      renderLdnGroups(computeLdnStandings(evs)); // classement à jour (dès qu'il y a des résultats)
+      const stds = computeLdnStandings(evs);
+      renderLdnGroups(stds); // classement à jour (dès qu'il y a des résultats)
+      window.LDN.events = evs; window.LDN.standings = stds; // pour la fiche équipe LdN
       const legend = document.getElementById('ldn-legend');
       if (legend && evs.some(e => e.competitions[0].status.type.state === 'post')) legend.style.display = '';
       const list = document.getElementById('ldn-fixtures');
@@ -2071,6 +2086,100 @@ function closeCountryCard() {
   setTimeout(() => { if (!backdrop.classList.contains('open')) backdrop.innerHTML = ''; }, 300);
 }
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCountryCard(); });
+
+/* ===========================================================
+   FICHE ÉQUIPE — LIGUE DES NATIONS (réutilise la carte à paillettes + le CSS
+   .pixel-card/.pc-* de la carte pays CDM ; seules les DONNÉES changent :
+   groupe LdN, résultats uefa.nations, statut selon le classement du groupe).
+   =========================================================== */
+function _ldnResults(name) {
+  const out = [];
+  ((window.LDN && LDN.events) || []).forEach(e => {
+    const c = e.competitions && e.competitions[0]; if (!c) return;
+    const st = c.status && c.status.type && c.status.type.state; if (st !== 'post' && st !== 'in') return;
+    const cs = c.competitors || []; if (cs.length < 2) return;
+    const me = cs.find(x => x.team && frName(x.team.displayName) === name);
+    if (!me) return;
+    const opp = cs.find(x => x !== me); if (!opp || !opp.team) return;
+    const gf = parseInt(me.score), ga = parseInt(opp.score); if (isNaN(gf) || isNaN(ga)) return;
+    out.push({ opp: frName(opp.team.displayName), gf, ga, result: gf > ga ? 'W' : gf < ga ? 'L' : 'D', live: st === 'in', date: e.date });
+  });
+  out.sort((a, b) => new Date(a.date) - new Date(b.date));
+  return out;
+}
+function _ldnNext(name) {
+  const cands = ((window.LDN && LDN.events) || []).filter(e => {
+    const c = e.competitions && e.competitions[0]; if (!c || c.status.type.state !== 'pre') return false;
+    return (c.competitors || []).some(x => x.team && frName(x.team.displayName) === name);
+  }).sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (!cands.length) return null;
+  const c = cands[0].competitions[0];
+  const opp = (c.competitors || []).find(x => x.team && frName(x.team.displayName) !== name);
+  return { opp: opp && opp.team ? frName(opp.team.displayName) : '?', date: cands[0].date };
+}
+function _ldnStatus(name) { // top / drop / mid / soon selon le classement du groupe
+  const st = window.LDN && LDN.standings; if (!st) return 'soon';
+  for (const g of st) {
+    const i = g.rows.findIndex(r => r.fr === name);
+    if (i < 0) continue;
+    if (!g.played) return 'soon';
+    if (i === 0) return 'top';
+    if (i === g.rows.length - 1 && g.rows.length >= 4) return 'drop';
+    return 'mid';
+  }
+  return 'soon';
+}
+function _ldnGotoGroup() { closeCountryCard(); const s = document.querySelector('.ldn-section'); if (s) setTimeout(() => s.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60); }
+
+function openLdnCard(name) {
+  const L = window.LDN, backdrop = document.getElementById('country-modal-backdrop');
+  if (!L || !backdrop) return;
+  const g = L.groupOf(name); if (!g) return;
+  const grpLabel = `${window.t('ldn_league')} ${g.lg} · ${window.t('group')} ${g.num}`;
+  const SB = { top: ['ldn_st_top', 'is-alive'], drop: ['ldn_st_drop', 'is-out'], mid: ['ldn_st_mid', 'is-mid'], soon: ['ldn_st_soon', 'is-mid'] }[_ldnStatus(name)];
+  const results = _ldnResults(name), next = _ldnNext(name);
+  const chip = (r) => `<span class="pc-res-chip res-${r.result.toLowerCase()}${r.live ? ' is-live' : ''}" title="${escapeHTML(name)} ${r.gf}–${r.ga} ${escapeHTML(r.opp)}"><img src="${L.flag(r.opp, 40)}" alt="" onerror="this.style.display='none'"> ${r.gf}–${r.ga}</span>`;
+  let upcoming = '';
+  if (next) {
+    const when = HAS_DAYJS ? dayjs(next.date).tz(PARIS_TZ).format('ddd D MMM') : new Date(next.date).toLocaleDateString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short' });
+    upcoming = `<div class="pc-ko-row"><div class="pc-ko-match pc-upcoming"><span class="pc-up-chip"><img src="${L.flag(next.opp, 40)}" alt="" onerror="this.style.display='none'"> ${escapeHTML(next.opp)} · ${window.t('cc_upcoming')} ${when}</span></div></div>`;
+  }
+  const cta = `<button class="pc-cta" onclick="_ldnGotoGroup()">${window.t('view_group')} →</button>`;
+  let body;
+  if (results.length) {
+    const w = results.filter(r => r.result === 'W' && !r.live).length, d = results.filter(r => r.result === 'D' && !r.live).length, l = results.filter(r => r.result === 'L' && !r.live).length;
+    const wdl = `<b>${w}</b>${window.t('res_w')} · <b>${d}</b>${window.t('res_d')} · <b>${l}</b>${window.t('res_l')}`;
+    body = `<div class="pc-results"><div class="pc-phase pc-phase-grp"><div class="pc-phase-head">🇪🇺 ${escapeHTML(grpLabel)}</div>`
+      + `<div class="pc-res-summary">${wdl}</div><div class="pc-res-row">${results.map(chip).join('')}</div>${upcoming}</div>`
+      + `<div class="pc-ctas">${cta}</div></div>`;
+  } else {
+    // avant le 1er match : adversaires du groupe + prochaine affiche
+    const opps = g.teams.filter(t => t !== name);
+    body = `<div class="pc-opponents"><div class="pc-opp-label">${window.t('opponents_label')}</div>`
+      + `<div class="pc-opp-row">${opps.map(o => `<div class="pc-opp" title="${escapeHTML(o)}"><img src="${L.flag(o, 40)}" srcset="${L.flag(o, 80)} 2x" alt="" onerror="this.style.display='none'"><span>${escapeHTML(o)}</span></div>`).join('')}</div>`
+      + `${upcoming}${cta}</div>`;
+  }
+  backdrop.innerHTML = `
+    <div class="pixel-card" id="pixel-card" data-country="${escFav(name)}">
+      <canvas></canvas>
+      <button class="pc-close" onclick="closeCountryCard()" aria-label="Fermer">✕</button>
+      <div class="pc-status ${SB[1]}" id="pc-status">${window.t(SB[0])}</div>
+      <div class="pixel-card-inner">
+        <div class="pc-group">${escapeHTML(grpLabel)}</div>
+        <div>
+          <img class="pc-flag" src="${L.flag(name, 320)}" alt="${escFav(name)}" onerror="this.style.display='none'">
+          <div class="pc-name">${escapeHTML(name)}</div>
+          <div class="pc-sub">${window.t('comp_ldn')} 2026-27</div>
+        </div>
+        <div class="pc-bottom" id="pc-bottom">${body}</div>
+      </div>
+    </div>`;
+  backdrop.classList.add('open');
+  const canvas = document.getElementById('pixel-card').querySelector('canvas');
+  _pixelCtl = attachPixelCanvas(canvas, ['#fbc531', '#f5d76e', '#ffffff', '#ff4757', '#ffd966'], { gap: 8, speed: 0.08 });
+  _pixelCtl.build(); _pixelCtl.appear();
+  backdrop.onclick = (e) => { if (e.target === backdrop) closeCountryCard(); };
+}
 </script>
 <script>
 /* Classement FIFA en direct — widget dashboard (module partagé fifa-ranking.js).
