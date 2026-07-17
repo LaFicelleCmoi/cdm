@@ -27,14 +27,14 @@
 <script src="team-data.js?v=1"></script>
 <script src="ldn-data.js?v=1"></script>
 <script src="competition.js?v=2"></script>
-<script src="i18n.js?v=31"></script>
+<script src="i18n.js?v=32"></script>
 <script src="events.js?v=3"></script>
 <script src="fifa-ranking.js?v=2"></script>
 <!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
 </script>
-<script type="module" src="lanyard.js?v=4"></script>
+<script type="module" src="lanyard.js?v=5"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -469,6 +469,8 @@ body {
 .ldn-legend .ldn-lg-key.up { background: var(--green-b, #2ed573); margin-left: 10px; }
 .ldn-legend .ldn-lg-key.down { background: var(--red); margin-left: 14px; }
 .go-section-title { font-family: var(--font-d); font-size: 1.8em; letter-spacing: 0.05em; color: #fff; margin-bottom: 16px; }
+/* mode 🇪🇺 Nations : les 12 groupes CDM laissent la place à la section LdN */
+html[data-comp="ldn"] .groups-overview { display: none; }
 .groups-overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .go-card { background: rgba(15,25,35,0.7); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; backdrop-filter: blur(8px); transition: border-color 0.2s, transform 0.2s; }
 .go-card:hover { border-color: rgba(251,197,49,0.35); transform: translateY(-2px); }
@@ -1440,8 +1442,31 @@ function renderFavHero() {
   const _stage = document.getElementById('lanyard-stage');
   if (!FAV) { cardHost.innerHTML = ''; if (_stage) _stage.style.display = 'none'; if (window.CDMLanyard) window.CDMLanyard.unmount(); return; }
   if (_stage) _stage.style.display = '';
+  const LDN_MODE = window.COMP && window.COMP.mode === 'ldn';
+  const lgrp = (LDN_MODE && window.LDN_DATA) ? window.LDN_DATA.groupOf(FAV) : null;
   const g = groupOf(FAV) || '?';
+  let grpLine = `${window.t('fav_group')} ${g}`;
   let meta = '', phaseHtml = '';
+  if (LDN_MODE) {
+    // mode 🇪🇺 Nations : groupe, statut et matchs LdN de la sélection
+    if (lgrp) {
+      grpLine = `${window.t('ldn_league')} ${lgrp.lg} · ${window.t('group')} ${lgrp.num}`;
+      const nx = _ldnNext(FAV);
+      if (nx) {
+        const when = HAS_DAYJS ? dayjs(nx.date).tz(PARIS_TZ).format('ddd D MMM · HH:mm')
+                               : new Date(nx.date).toLocaleString('fr-FR', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        meta = `${window.t('fav_next')} <b>${escFav(nx.opp)}</b> · ${when}`;
+      } else {
+        const rs = _ldnResults(FAV), last = rs && rs[rs.length - 1];
+        meta = last ? `${last.live ? '🔴 ' + window.t('live_badge') + ' :' : window.t('fav_last')} <b>${last.gf}–${last.ga}</b> vs ${escFav(last.opp)}` : window.t('fav_no_match');
+      }
+      const stKey = { top: 'ldn_st_top', drop: 'ldn_st_drop', mid: 'ldn_st_mid', soon: 'ldn_st_soon' }[_ldnStatus(FAV)];
+      phaseHtml = `<div class="fav-hero-phase${stKey === 'ldn_st_top' ? ' is-final' : ''}">${window.t(stKey)}</div>`;
+    } else {
+      grpLine = window.t('comp_ldn');
+      meta = window.t('ldn_fav_none'); // sélection hors UEFA (ex : Brésil)
+    }
+  } else {
   // Phase d'une rencontre via le season.slug ESPN
   const PHASES = {
     'group-stage':    ['phase_groups', ''],
@@ -1468,17 +1493,19 @@ function renderFavHero() {
     // Match du favori EN COURS : afficher « EN DIRECT », pas « Dernier match »
     meta = last ? `${last.live ? '🔴 ' + window.t('live_badge') + ' :' : window.t('fav_last')} <b>${last.gf}–${last.ga}</b> vs ${escFav(last.opp)}` : window.t('fav_no_match');
   }
+  }
+  const favOpen = (LDN_MODE && lgrp) ? 'openLdnCard' : 'openCountryCard';
   cardHost.innerHTML = `
     <div class="fav-hero-card">
       <div class="fav-hero-flag"><img src="${flagUrl(FAV, 160)}" alt="${escFav(FAV)}" onerror="this.style.display='none'"></div>
       <div class="fav-hero-info">
         <div class="fav-hero-label">★ ${window.t('fav_label')}</div>
         <div class="fav-hero-name">${escFav(FAV)}</div>
-        <div class="fav-hero-meta">${window.t('fav_group')} ${g} · ${meta}</div>
+        <div class="fav-hero-meta">${grpLine} · ${meta}</div>
       </div>
       ${phaseHtml}
       <div class="fav-hero-actions">
-        <button class="fav-go" onclick="openCountryCard(FAV)">${window.t('fav_see')}</button>
+        <button class="fav-go" onclick="${favOpen}(FAV)">${window.t('fav_see')}</button>
         <button class="fav-change" onclick="openFavModal()">${window.t('fav_change')}</button>
       </div>
     </div>`;
@@ -1500,16 +1527,20 @@ function syncLanyard() {
   const stage = document.getElementById('lanyard-stage');
   if (!stage || !FAV) { window.CDMLanyard.unmount(); return; }
   const lang = (window.getLang && window.getLang()) || 'fr';
+  // mode 🇪🇺 Nations : le badge devient une accréditation Ligue des Nations
+  const LDN_MODE = window.COMP && window.COMP.mode === 'ldn';
+  const lgrp = (LDN_MODE && window.LDN_DATA) ? window.LDN_DATA.groupOf(FAV) : null;
   window.CDMLanyard.mount(stage, {
-    key: FAV + '|' + lang,               // rebuild si le pays OU la langue change
-    country: FAV, iso: ISO[FAV] || '', group: groupOf(FAV) || '',
+    key: FAV + '|' + lang + (LDN_MODE ? '|ldn' : ''), // rebuild si pays, langue ou compétition change
+    country: FAV, iso: ISO[FAV] || '',
+    group: LDN_MODE ? (lgrp ? `${lgrp.lg} · ${window.t('group')} ${lgrp.num}` : '') : (groupOf(FAV) || ''),
     flag: flagUrl(FAV, 320),
-    compLabel: window.t('lanyard_comp'),
+    compLabel: LDN_MODE ? window.t('lanyard_comp_ldn') : window.t('lanyard_comp'),
     roleLabel: window.t('lanyard_role'),
-    groupLabel: window.t('fav_group'),
-    serial: 'FWC-' + (ISO[FAV] || 'XX').toUpperCase() + '-26',
+    groupLabel: LDN_MODE ? (lgrp ? window.t('ldn_league') : '') : window.t('fav_group'),
+    serial: (LDN_MODE && lgrp ? 'UNL-' : 'FWC-') + (ISO[FAV] || 'XX').toUpperCase() + '-26',
     strapColors: teamColorsOf(FAV) || undefined, // cordon aux couleurs (si déjà connues)
-    onClick: () => openCountryCard(FAV)
+    onClick: () => { if (LDN_MODE && lgrp && window.openLdnCard) openLdnCard(FAV); else openCountryCard(FAV); }
   });
   // enrichit le badge avec les données vivantes (sans reconstruire la scène 3D)
   if (window.CDMLanyard.updateBadge) window.CDMLanyard.updateBadge(lanyardExtra(lang));
@@ -1526,16 +1557,26 @@ function lanyardExtra(lang) {
       + '  ·  ' + Math.round(e.pts) + ' PTS';
   } catch (_) {}
   try {
-    const n = getTeamNextMatch(FAV);
-    if (n) {
-      const cs = n.competitions[0].competitors || [];
-      const opp = cs.find(c => c.team && frName(c.team.displayName) !== FAV);
-      let nm = opp && opp.team ? frName(opp.team.displayName) : '?';
-      // adversaire pas encore connu (placeholder ESPN « Quarterfinal 2 Winner »…)
-      if (/winner|loser|tbd/i.test(nm)) nm = (lang === 'en') ? 'TBD' : 'À définir';
-      const when = HAS_DAYJS ? dayjs(n.date).tz(PARIS_TZ).format('D MMM · HH:mm')
-                             : new Date(n.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
-      ex.subLine = (window.t('lanyard_next') + ' ' + nm + ' · ' + when).toUpperCase();
+    if (window.COMP && window.COMP.mode === 'ldn') {
+      // mode 🇪🇺 Nations : prochain match LdN de la sélection
+      const nx = (window.LDN_DATA && window.LDN_DATA.groupOf(FAV)) ? _ldnNext(FAV) : null;
+      if (nx) {
+        const when = HAS_DAYJS ? dayjs(nx.date).tz(PARIS_TZ).format('D MMM · HH:mm')
+                               : new Date(nx.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        ex.subLine = (window.t('lanyard_next') + ' ' + nx.opp + ' · ' + when).toUpperCase();
+      }
+    } else {
+      const n = getTeamNextMatch(FAV);
+      if (n) {
+        const cs = n.competitions[0].competitors || [];
+        const opp = cs.find(c => c.team && frName(c.team.displayName) !== FAV);
+        let nm = opp && opp.team ? frName(opp.team.displayName) : '?';
+        // adversaire pas encore connu (placeholder ESPN « Quarterfinal 2 Winner »…)
+        if (/winner|loser|tbd/i.test(nm)) nm = (lang === 'en') ? 'TBD' : 'À définir';
+        const when = HAS_DAYJS ? dayjs(n.date).tz(PARIS_TZ).format('D MMM · HH:mm')
+                               : new Date(n.date).toLocaleString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        ex.subLine = (window.t('lanyard_next') + ' ' + nm + ' · ' + when).toUpperCase();
+      }
     }
   } catch (_) {}
   return ex;
@@ -1634,6 +1675,8 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
       const stds = computeLdnStandings(evs);
       renderLdnGroups(stds); // classement à jour (dès qu'il y a des résultats)
       window.LDN.events = evs; window.LDN.standings = stds; // pour la fiche équipe LdN
+      // mode 🇪🇺 Nations : le bandeau sélection + le badge attendaient ces données
+      if (window.COMP && window.COMP.mode === 'ldn' && typeof renderFavHero === 'function') renderFavHero();
       const legend = document.getElementById('ldn-legend');
       if (legend && evs.some(e => e.competitions[0].status.type.state === 'post')) legend.style.display = '';
       const list = document.getElementById('ldn-fixtures');

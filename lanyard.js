@@ -74,8 +74,14 @@ import * as THREE from 'three';
     ctx.fillStyle = hg; ctx.fillRect(0, 0, W, headH);
     ctx.fillStyle = '#10202f';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.font = `800 ${Math.round(H * 0.042)}px 'Inter', Arial, sans-serif`;
-    ctx.fillText(spaced(opts.compLabel || 'COUPE DU MONDE 2026'), W / 2, headH * 0.52);
+    const compTxt = spaced(opts.compLabel || 'COUPE DU MONDE 2026');
+    // réduit la police si le libellé déborde (ex : « LIGUE DES NATIONS 2026-27 »)
+    let compFs = Math.round(H * 0.042);
+    ctx.font = `800 ${compFs}px 'Inter', Arial, sans-serif`;
+    while (compFs > 16 && ctx.measureText(compTxt).width > W * 0.92) {
+      compFs -= 2; ctx.font = `800 ${compFs}px 'Inter', Arial, sans-serif`;
+    }
+    ctx.fillText(compTxt, W / 2, headH * 0.52);
 
     // drapeau (si chargé & non-tainted), un peu plus grand + ombre portée
     const flagY = headH + H * 0.04, flagW = W * 0.56, flagH = flagW * 0.66, flagX = (W - flagW) / 2;
