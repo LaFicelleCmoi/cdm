@@ -23,7 +23,8 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/timezone.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
-<script src="i18n.js?v=26"></script>
+<script src="team-data.js?v=1"></script>
+<script src="i18n.js?v=27"></script>
 <script src="events.js?v=3"></script>
 <script src="fifa-ranking.js?v=2"></script>
 <style>
@@ -2367,7 +2368,13 @@ document.addEventListener('langchange', renderScorers);
    Si plusieurs matchs en direct → rotation toutes les 6 s.
    =========================================================== */
 (function liveWidget() {
-  const ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+  // Après la finale CDM (19/07/2026), le widget LIVE bascule sur la Ligue des
+  // Nations 2026-27 (uefa.nations). La synchro bracket/poules + le classement
+  // FIFA restent eux ancrés sur fifa.world (voir WC_ENDPOINT + gardes plus bas).
+  const WC_LIVE_END = Date.UTC(2026, 6, 20);
+  const ACTIVE_SLUG = Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world';
+  const ENDPOINT = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/scoreboard`;
+  const WC_ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
   const el = document.getElementById('live-widget');
   if (!el) return;
 
@@ -2575,8 +2582,9 @@ document.addEventListener('langchange', renderScorers);
     'Portugal':'Portugal','DR Congo':'RD Congo','Congo DR':'RD Congo','Uzbekistan':'Ouzbékistan','Colombia':'Colombie',
     'England':'Angleterre','Croatia':'Croatie','Ghana':'Ghana','Panama':'Panama'
   };
-  const frName = (en) => teamNameEnFr[en] || en;
-  window.TEAM_FR = teamNameEnFr; // exposé pour l'onglet buteurs (noms FR des pays ESPN)
+  // team-data.js (surcouche UEFA/LdN) d'abord, puis table locale CDM en repli
+  const frName = (en) => (window.TEAM_FR && window.TEAM_FR[en]) || teamNameEnFr[en] || en;
+  window.TEAM_FR = Object.assign(window.TEAM_FR || {}, teamNameEnFr); // fusion (ne pas écraser team-data.js)
 
   function findGroupMatch(frA, frB) {
     for (const g of groupKeys) {
@@ -2692,12 +2700,16 @@ document.addEventListener('langchange', renderScorers);
 
   function update(data) {
     const events = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
-    recordR32(events); // vraies oppositions du R32 (corrige les barragistes simulés)
-    // Réconcilier AVANT la synchro : sinon les scores des slots encore faux
-    // (équipe simulée ≠ vraie affiche) sont ignorés silencieusement.
-    if (typeof reconcileR32FromEspn === 'function' && reconcileR32FromEspn() && typeof buildBracket === 'function') buildBracket();
-    syncSimFromEspn(events); // mirror real live/finished scores into the simulator
-    if (window.updateFifaRanking) window.updateFifaRanking(events); // classement FIFA en direct
+    // Synchro CDM uniquement : des matchs de Ligue des Nations ne doivent JAMAIS
+    // alimenter le bracket/poules ni le classement FIFA (coefficients différents).
+    if (ACTIVE_SLUG === 'fifa.world') {
+      recordR32(events); // vraies oppositions du R32 (corrige les barragistes simulés)
+      // Réconcilier AVANT la synchro : sinon les scores des slots encore faux
+      // (équipe simulée ≠ vraie affiche) sont ignorés silencieusement.
+      if (typeof reconcileR32FromEspn === 'function' && reconcileR32FromEspn() && typeof buildBracket === 'function') buildBracket();
+      syncSimFromEspn(events); // mirror real live/finished scores into the simulator
+      if (window.updateFifaRanking) window.updateFifaRanking(events); // classement FIFA en direct
+    }
     const stateOf = e => e.competitions[0].status.type.state;
     const live = events.filter(e => stateOf(e) === 'in');
     _hasLive = live.length > 0; // pilote la cadence de rafraîchissement
@@ -2746,7 +2758,7 @@ document.addEventListener('langchange', renderScorers);
     const btn = document.getElementById('btn-sync');
     if (btn) btn.classList.add('syncing');
     try {
-      const url = `${ENDPOINT}?dates=${TOURNAMENT_START}-${TOURNAMENT_END}&limit=500`;
+      const url = `${WC_ENDPOINT}?dates=${TOURNAMENT_START}-${TOURNAMENT_END}&limit=500`; // rattrapage = toujours CDM
       const res = await fetch(url, { cache: 'no-store', signal: tmo(12000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();

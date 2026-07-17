@@ -144,7 +144,10 @@
      overlay.html?scale=1.4&pos=bottom-left
    ============================================================ */
 (function () {
-  const ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
+  // Après la finale CDM (19/07/2026), l'overlay bascule sur la Ligue des Nations 2026-27
+  const WC_LIVE_END = Date.UTC(2026, 6, 20);
+  const ACTIVE_SLUG = Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world';
+  const ENDPOINT = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/scoreboard`;
   const P = new URLSearchParams(location.search);
   const POS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(P.get('pos')) ? P.get('pos') : 'top-left';
   const TEAM = (P.get('team') || '').trim().toLowerCase();
@@ -186,7 +189,7 @@
   const COMP_LOGO = 'https://a.espncdn.com/i/leaguelogos/soccer/500-dark/4.png';
 
   /* ---- Événements du match (buteurs/cartons/penalty) — inline, autonome ---- */
-  const SUMMARY = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
+  const SUMMARY = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/summary?event=`;
   const evCache = {}; // id -> {ts, list}
   const feedSig = {}; // id -> signature du dernier event affiché (flash sur nouveauté)
   const FEED_EMOJI = { goal: '⚽', pen: '⚽', freekick: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨' };
