@@ -24,7 +24,8 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="i18n.js?v=28"></script>
+<script src="competition.js?v=1"></script>
+<script src="i18n.js?v=29"></script>
 <script src="events.js?v=3"></script>
 <script src="fifa-ranking.js?v=2"></script>
 <style>
@@ -591,6 +592,7 @@ body::before {
 <div id="toast-stack"></div>
 
 <div id="lang-toggle" style="top:18px; left:20px;"></div>
+<div id="comp-toggle"></div>
 
 <a href="dashboard.html" class="nav-back" data-i18n="nav_back">← Retour au Dashboard</a>
 
@@ -2371,8 +2373,9 @@ document.addEventListener('langchange', renderScorers);
   // Après la finale CDM (19/07/2026), le widget LIVE bascule sur la Ligue des
   // Nations 2026-27 (uefa.nations). La synchro bracket/poules + le classement
   // FIFA restent eux ancrés sur fifa.world (voir WC_ENDPOINT + gardes plus bas).
+  // Le toggle 🏆/🇪🇺 (competition.js) permet de forcer l'une ou l'autre à la main.
   const WC_LIVE_END = Date.UTC(2026, 6, 20);
-  const ACTIVE_SLUG = Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world';
+  const ACTIVE_SLUG = (window.COMP && window.COMP.slug) || (Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world');
   const ENDPOINT = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/scoreboard`;
   const WC_ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard';
   const el = document.getElementById('live-widget');

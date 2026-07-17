@@ -125,6 +125,7 @@
 <body>
 <div id="bug"></div>
 
+<script src="competition.js?v=1"></script>
 <script>
 /* ============================================================
    Overlay OBS — scores en direct Coupe du Monde 2026
@@ -139,14 +140,17 @@
    - ?team=France        → épingle le match d'une équipe précise
    - ?scale=1.3          → agrandit / réduit l'overlay
    - ?hideEmpty=1        → cache tout s'il n'y a aucun match
+   - ?comp=wc | ldn      → force la compétition (CDM / Ligue des Nations),
+                           sinon suit le toggle du site puis l'auto par date
    Exemples :
      overlay.html?team=France&pos=top-right
      overlay.html?scale=1.4&pos=bottom-left
    ============================================================ */
 (function () {
-  // Après la finale CDM (19/07/2026), l'overlay bascule sur la Ligue des Nations 2026-27
+  // Après la finale CDM (19/07/2026), l'overlay bascule sur la Ligue des Nations 2026-27.
+  // competition.js gère ?comp=wc|ldn + le choix du toggle du site (localStorage).
   const WC_LIVE_END = Date.UTC(2026, 6, 20);
-  const ACTIVE_SLUG = Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world';
+  const ACTIVE_SLUG = (window.COMP && window.COMP.slug) || (Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world');
   const ENDPOINT = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/scoreboard`;
   const P = new URLSearchParams(location.search);
   const POS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(P.get('pos')) ? P.get('pos') : 'top-left';

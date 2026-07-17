@@ -25,7 +25,8 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="i18n.js?v=30"></script>
+<script src="competition.js?v=1"></script>
+<script src="i18n.js?v=31"></script>
 <script src="events.js?v=3"></script>
 <script src="fifa-ranking.js?v=2"></script>
 <!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
@@ -678,6 +679,7 @@ body {
 <canvas id="confetti-canvas"></canvas>
 
 <div id="lang-toggle" style="top:18px; left:20px;"></div>
+<div id="comp-toggle"></div>
 
 <a href="CDM.html" class="nav-forward" data-i18n="nav_simulator">Tracker →</a>
 
@@ -906,8 +908,9 @@ function scoringSides(prevKey, curHome, curAway) {
 const ESPN_ENDPOINT = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard'; // CDM 2026 (historique : cartes pays, classement FIFA)
 // Après la finale CDM (19/07/2026), les surfaces LIVE basculent automatiquement
 // sur la Ligue des Nations 2026-27 (coup d'envoi le 24 septembre, ESPN: uefa.nations).
+// Le toggle 🏆/🇪🇺 (competition.js) permet de forcer l'une ou l'autre à la main.
 const WC_LIVE_END = Date.UTC(2026, 6, 20);
-const ACTIVE_SLUG = Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world';
+const ACTIVE_SLUG = (window.COMP && window.COMP.slug) || (Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world');
 const LIVE_ENDPOINT = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/scoreboard`;
 const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } }; // timeout fetch sûr
 
