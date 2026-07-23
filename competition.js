@@ -3,7 +3,7 @@
    Résolution du mode (le premier qui répond gagne) :
      1. ?comp=wc|ldn dans l'URL   (pratique pour OBS : stockage séparé)
      2. localStorage 'competitionMode' (choix du toggle, partagé entre pages)
-     3. auto par date : LdN après la finale CDM (20/07/2026)
+     3. défaut : Ligue des Nations (la CDM s'est achevée le 19/07/2026)
    Expose window.COMP = { mode:'wc'|'ldn', slug, auto, set(mode) }.
    Si la page pose une ancre <div id="comp-toggle">, injecte le toggle
    pilule 🏆/🇪🇺 (même famille visuelle que le sélecteur FR/EN).
@@ -13,7 +13,6 @@
 (function () {
   'use strict';
   var KEY = 'competitionMode';
-  var WC_LIVE_END = Date.UTC(2026, 6, 20); // après la finale CDM → auto LdN
 
   var qp = null;
   try { qp = new URLSearchParams(location.search).get('comp'); } catch (e) {}
@@ -22,7 +21,9 @@
   try { stored = localStorage.getItem(KEY); } catch (e) {}
   if (stored !== 'wc' && stored !== 'ldn') stored = null;
 
-  var auto = Date.now() >= WC_LIVE_END ? 'ldn' : 'wc';
+  // La CDM s'est achevée le 19/07/2026 → la Ligue des Nations est la
+  // compétition PAR DÉFAUT (le toggle 🏆 permet toujours de revoir la CDM).
+  var auto = 'ldn';
   var mode = qp || stored || auto;
   // marqueur global pour le CSS des pages (ex : onglets du tracker par compétition)
   try { document.documentElement.dataset.comp = mode; } catch (e) {}
