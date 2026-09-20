@@ -26,9 +26,9 @@
 <script src="team-data.js?v=1"></script>
 <script src="ldn-data.js?v=2"></script>
 <script src="competition.js?v=3"></script>
-<script src="i18n.js?v=31"></script>
+<script src="i18n.js?v=33"></script>
 <script src="events.js?v=3"></script>
-<script src="fifa-ranking.js?v=2"></script>
+<script src="fifa-ranking.js?v=3"></script>
 <style>
 :root {
   --pitch:   #0b2216; 
@@ -877,12 +877,13 @@ function formatPlanningDate(frStr) {
     }).join('');
   }
 
-  // avant le 1er match de l'API : toutes les confrontations du tirage (aller simple)
+  // avant la réponse de l'API : toutes les confrontations du tirage, aller-retour
+  // (phase de ligue = 6 journées → 12 matchs à 4 équipes, 6 à 3 équipes)
   function ldnFixtures(teams) {
     const out = [];
     for (let i = 0; i < teams.length; i++)
-      for (let j = i + 1; j < teams.length; j++)
-        out.push({ t1: teams[i], t2: teams[j], s1: null, s2: null, state: 'pending' });
+      for (let j = 0; j < teams.length; j++)
+        if (i !== j) out.push({ t1: teams[i], t2: teams[j], s1: null, s2: null, state: 'pending' });
     return out;
   }
 
@@ -939,6 +940,7 @@ function formatPlanningDate(frStr) {
 
   /* ---- rendu partagé calendrier / phase finale : jours de matchs ---- */
   let LDN_EVS = [], LDN_KO = [], LDN_STAND = null;
+  const LDN_START = '2026-09-01'; // 1re journée : 24/09/2026 (avant = cycle précédent)
   const isKo = (e) => !!(e && e.season && e.season.slug && e.season.slug !== 'group-stage');
   const KO_PHASE = { 'quarterfinals': 'phase_qf', 'semifinals': 'phase_sf', '3rd-place-match': 'phase_3p', 'final': 'phase_final' };
 
@@ -1062,12 +1064,18 @@ function formatPlanningDate(frStr) {
   renderLdnKo(); renderLdnScorers(); // états d'attente instantanés
   // saison complète : phase de ligue (sept-nov 2026) + barrages/quarts (mars 2027)
   // + Final Four (juin 2027) — une seule requête pour tout
-  fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?dates=20260924-20270630&limit=500', { cache: 'no-store' })
+  // ESPN ne répond plus aux plages `dates=AAAAMMJJ-AAAAMMJJ` (HTTP 400) : on
+  // interroge la SAISON (`dates=2026` → tout le millésime 2026-27, soit les 156
+  // matchs de phase de ligue + les barrages/quarts/Final Four dès leur annonce).
+  fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?dates=2026&limit=1000', { cache: 'no-store' })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(data => {
       LDN_EVS = (data.events || [])
         .filter(e => e && e.competitions && e.competitions[0] && (e.competitions[0].competitors || []).length >= 2
-          && e.competitions[0].competitors.every(x => x && x.team))
+          && e.competitions[0].competitors.every(x => x && x.team)
+          // la saison ESPN 2026 contient aussi les barrages de relégation de
+          // MARS 2026 (fin du cycle 2024-25) : ils ne font pas partie de cette édition
+          && (e.date || '') >= LDN_START)
         .sort((a, b) => new Date(a.date) - new Date(b.date));
       LDN_KO = LDN_EVS.filter(isKo);
       // le classement des groupes ne compte QUE la phase de ligue (jamais les KO)
@@ -2504,7 +2512,8 @@ let _lastTotals = {};        // nom -> dernier total affiché (animation "vient 
 // Buteurs calculés EN TEMPS RÉEL en agrégeant les buts de tous les matchs (1 seule requête).
 // L'agrégat ESPN « goalsLeaders » est en retard d'une journée ET ignore les phases finales ;
 // le scoreboard daté expose chaque but (details[].athletesInvolved) → bien plus fiable.
-const SCORERS_FEED_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=20260611-20260720&limit=500';
+// saison entière (`dates=2026`) : ESPN refuse désormais les plages de dates
+const SCORERS_FEED_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/scoreboard?dates=2026&limit=1000';
 const LIVE_VISIBLE = 16;
 
 // Une ligne de buteur (réutilisée par les deux modes). opts.round = drapeau rond (ESPN), opts.badge = pastille 2026.
@@ -3064,18 +3073,18 @@ document.addEventListener('langchange', renderScorers);
 
   /* ---------- RATTRAPAGE : récupère TOUT l'historique du tournoi ----------
      L'endpoint par défaut ne renvoie que les matchs du jour. Ici on interroge
-     ESPN sur toute la période (paramètre dates=AAAAMMJJ-AAAAMMJJ) → on rattrape
-     tous les résultats joués pendant que le PC était éteint. ESPN = serveur
+     ESPN sur toute la SAISON (paramètre dates=AAAA — les plages
+     dates=AAAAMMJJ-AAAAMMJJ renvoient désormais HTTP 400) → on rattrape tous
+     les résultats joués pendant que le PC était éteint. ESPN = serveur
      toujours allumé : les scores y sont stockés, on les ré-aspire à l'ouverture. */
-  const TOURNAMENT_START = '20260611';
-  const TOURNAMENT_END = '20260720';
+  const TOURNAMENT_SEASON = '2026'; // CDM 2026 = 104 matchs (11/06 → 19/07)
   let _lastCatchUp = 0;
 
   async function catchUp(manual = false) {
     const btn = document.getElementById('btn-sync');
     if (btn) btn.classList.add('syncing');
     try {
-      const url = `${WC_ENDPOINT}?dates=${TOURNAMENT_START}-${TOURNAMENT_END}&limit=500`; // rattrapage = toujours CDM
+      const url = `${WC_ENDPOINT}?dates=${TOURNAMENT_SEASON}&limit=1000`; // rattrapage = toujours CDM
       const res = await fetch(url, { cache: 'no-store', signal: tmo(12000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
