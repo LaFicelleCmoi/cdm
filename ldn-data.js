@@ -5,7 +5,9 @@
      GROUPS   : [[ligue, n°, [équipes FR]], … 14 groupes],
      groupOf(fr)      -> { lg, num, teams } | null,
      frName(en)       -> nom FR (via TEAM_FR, sinon le nom ESPN),
-     standings(events)-> [{ lg, num, played, rows:[{fr,p,w,d,l,gf,ga,gd,pts}] }]
+     standings(events)-> [{ lg, num, played,
+                            rows    : [{fr,p,w,d,l,gf,ga,gd,pts,form:['W','D',…]}],
+                            matches : [{t1,t2,s1,s2,state,date}] }]
    }
    Règles phase de ligue : 3/1/0 pts, nuls autorisés (pas de t.a.b.),
    matchs terminés uniquement, tri Pts › différence › BM › alphabétique
@@ -43,31 +45,47 @@
   }
 
   function standings(events) {
-    var T = {};
-    GROUPS.forEach(function (g) { g[2].forEach(function (t) { T[t] = { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0 }; }); });
-    (events || []).forEach(function (e) {
+    var T = {}, M = {};
+    GROUPS.forEach(function (g) {
+      M[g[0] + g[1]] = [];
+      g[2].forEach(function (t) { T[t] = { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, form: [] }; });
+    });
+    // matchs triés par date : la forme (5 derniers) suit l'ordre chronologique
+    (events || []).slice().sort(function (x, y) { return new Date(x.date) - new Date(y.date); })
+    .forEach(function (e) {
       var c = e.competitions && e.competitions[0];
-      if (!c || !c.status || !c.status.type || c.status.type.state !== 'post') return;
+      if (!c) return;
       var cs = c.competitors || [];
       if (cs.length < 2 || !cs[0].team || !cs[1].team) return;
       var frA = frName(cs[0].team.displayName), frB = frName(cs[1].team.displayName);
+      if (!(frA in T) || !(frB in T)) return;
+      var gA = groupOf(frA);
+      if (!gA || !gA.teams.length || gA.teams.indexOf(frB) === -1) return; // adversaire hors groupe
+      var st = (c.status && c.status.type && c.status.type.state) || 'pre';
       var sA = parseInt(cs[0].score, 10), sB = parseInt(cs[1].score, 10);
-      if (isNaN(sA) || isNaN(sB) || !(frA in T) || !(frB in T)) return;
+      var has = st !== 'pre' && !isNaN(sA) && !isNaN(sB);
+      M[gA.lg + gA.num].push({
+        t1: frA, t2: frB,
+        s1: has ? sA : null, s2: has ? sB : null,
+        state: st === 'post' ? 'done' : (st === 'in' ? 'live' : 'pending'),
+        date: e.date
+      });
+      if (st !== 'post' || isNaN(sA) || isNaN(sB)) return;
       var a = T[frA], b = T[frB];
       a.p++; b.p++; a.gf += sA; a.ga += sB; b.gf += sB; b.ga += sA;
-      if (sA > sB) { a.w++; a.pts += 3; b.l++; }
-      else if (sA < sB) { b.w++; b.pts += 3; a.l++; }
-      else { a.d++; b.d++; a.pts++; b.pts++; }
+      if (sA > sB) { a.w++; a.pts += 3; b.l++; a.form.push('W'); b.form.push('L'); }
+      else if (sA < sB) { b.w++; b.pts += 3; a.l++; b.form.push('W'); a.form.push('L'); }
+      else { a.d++; b.d++; a.pts++; b.pts++; a.form.push('D'); b.form.push('D'); }
     });
     return GROUPS.map(function (g) {
       var teams = g[2];
       var played = teams.some(function (t) { return T[t].p > 0; });
       var rows = teams.map(function (t) {
         var s = T[t];
-        return { fr: t, p: s.p, w: s.w, d: s.d, l: s.l, gf: s.gf, ga: s.ga, gd: s.gf - s.ga, pts: s.pts };
+        return { fr: t, p: s.p, w: s.w, d: s.d, l: s.l, gf: s.gf, ga: s.ga, gd: s.gf - s.ga, pts: s.pts, form: s.form.slice(-5) };
       });
       if (played) rows.sort(function (x, y) { return y.pts - x.pts || y.gd - x.gd || y.gf - x.gf || x.fr.localeCompare(y.fr, 'fr'); });
-      return { lg: g[0], num: g[1], played: played, rows: rows };
+      return { lg: g[0], num: g[1], played: played, rows: rows, matches: M[g[0] + g[1]] };
     });
   }
 
