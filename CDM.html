@@ -24,7 +24,7 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="ldn-data.js?v=1"></script>
+<script src="ldn-data.js?v=2"></script>
 <script src="competition.js?v=3"></script>
 <script src="i18n.js?v=31"></script>
 <script src="events.js?v=3"></script>
@@ -202,6 +202,7 @@ html[data-comp="ldn"] .nav-tab[data-comp="wc"] { display: none !important; }
 .ldn-head-B { background: linear-gradient(135deg, #2e4a68, #4e7aa5); }
 .ldn-head-C { background: linear-gradient(135deg, #6e4a24, #9c6a33); }
 .ldn-head-D { background: linear-gradient(135deg, #39424f, #57636f); }
+.ldn-score { display: inline-flex; align-items: center; justify-content: center; font-family: var(--font-b); font-weight: 700; font-size: 0.88em; box-sizing: border-box; }
 .ldn-flag { width: 20px; height: 14px; object-fit: cover; border-radius: 2px; box-shadow: 0 1px 4px rgba(0,0,0,0.45); vertical-align: middle; }
 .ldn-top td { background: rgba(46,213,115,0.05); }
 .ldn-drop td { background: rgba(255,71,87,0.05); }
@@ -859,20 +860,65 @@ function formatPlanningDate(frStr) {
     ? `<img class="ldn-flag" src="https://flagcdn.com/w${w}/${iso(n)}.png" srcset="https://flagcdn.com/w${w * 2}/${iso(n)}.png 2x" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">`
     : '🏳';
 
-  /* ---- groupes : cartes classement (mêmes styles que les poules CDM) ---- */
+  /* ---- groupes : cartes classement (mêmes styles que les poules CDM,
+     colonne « 5 derniers » + liste des matchs du groupe sous le tableau) ---- */
+  // svgW/svgL/svgD du script CDM sont déclarés plus bas (TDZ à ce stade) : copies locales
+  const ldnW = `<svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>`;
+  const ldnL = `<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
+  const ldnD = `<svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>`;
+
+  function ldnFormCells(form) {
+    return Array.from({ length: 5 }).map((_, i) => {
+      const r = (form || [])[i];
+      if (r === 'W') return `<div class="form-circle form-w">${ldnW}</div>`;
+      if (r === 'L') return `<div class="form-circle form-l">${ldnL}</div>`;
+      if (r === 'D') return `<div class="form-circle form-d">${ldnD}</div>`;
+      return `<div class="form-circle form-empty"></div>`;
+    }).join('');
+  }
+
+  // avant le 1er match de l'API : toutes les confrontations du tirage (aller simple)
+  function ldnFixtures(teams) {
+    const out = [];
+    for (let i = 0; i < teams.length; i++)
+      for (let j = i + 1; j < teams.length; j++)
+        out.push({ t1: teams[i], t2: teams[j], s1: null, s2: null, state: 'pending' });
+    return out;
+  }
+
+  function ldnMatchRows(matches) {
+    return matches.map(m => {
+      const shape = m.state === 'live' ? 's-circle' : (m.state === 'done' ? 's-rect' : 's-hex');
+      const sCls = m.state === 'live' ? ' live-score' : (m.state === 'done' ? ' done-score' : '');
+      const val = (v) => (v === null || v === undefined ? '' : v);
+      return `<div class="match-row">
+        <span class="match-status-btn ms-${m.state} locked"><span class="shape-base ${shape}"></span></span>
+        <span class="mt-left">${esc(m.t1)} ${flag(m.t1, 40)}</span>
+        <div class="score-wrap">
+          <span class="score-in ldn-score${sCls}">${val(m.s1)}</span>
+          <span class="score-sep">–</span>
+          <span class="score-in ldn-score${sCls}">${val(m.s2)}</span>
+        </div>
+        <span class="mt-right">${flag(m.t2, 40)} ${esc(m.t2)}</span>
+      </div>`;
+    }).join('');
+  }
+
   function renderLdnGroupCards(stand) {
     const cont = document.getElementById('ldn-groups-container');
     if (!cont) return;
     cont.innerHTML = D.GROUPS.map(([lg, num, teams], gi) => {
       const st = stand && stand[gi];
       const played = st ? st.played : false;
-      const rows = st ? st.rows : teams.map(fr => ({ fr, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0 }));
+      const rows = st ? st.rows : teams.map(fr => ({ fr, p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, gd: 0, pts: 0, form: [] }));
+      const matches = (st && st.matches && st.matches.length) ? st.matches : ldnFixtures(teams);
       const body = rows.map((r, i) => {
         // 1er = tête de groupe (vert) ; dernier d'un groupe de 4 = relégation (rouge)
         const zone = played ? (i === 0 ? ' ldn-top' : (i === rows.length - 1 && rows.length >= 4 ? ' ldn-drop' : '')) : '';
         return `<tr class="r${i + 1}${zone}">
           <td><div class="team-name-cell"><span class="rank-badge">${i + 1}</span><span class="p-flag" style="margin:0;">${flag(r.fr, 40)}</span><span class="team-name-text">${esc(r.fr)}</span></div></td>
           <td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td>${r.gd > 0 ? '+' + r.gd : r.gd}</td><td class="pts-cell">${r.pts}</td>
+          <td><div class="form-guide">${ldnFormCells(r.form)}</div></td>
         </tr>`;
       }).join('');
       return `<div class="group-card">
@@ -882,10 +928,11 @@ function formatPlanningDate(frStr) {
         </div>
         <table class="standings">
           <thead><tr>
-            <th data-i18n="th_team">Équipe</th><th data-i18n="th_mp">MJ</th><th data-i18n="th_w">G</th><th data-i18n="th_d">N</th><th data-i18n="th_l">P</th><th data-i18n="th_gf">BP</th><th data-i18n="th_ga">BC</th><th data-i18n="th_gd">DB</th><th data-i18n="th_pts">Pts</th>
+            <th data-i18n="th_team">Équipe</th><th data-i18n="th_mp">MJ</th><th data-i18n="th_w">G</th><th data-i18n="th_d">N</th><th data-i18n="th_l">P</th><th data-i18n="th_gf">BP</th><th data-i18n="th_ga">BC</th><th data-i18n="th_gd">DB</th><th data-i18n="th_pts">Pts</th><th data-i18n="th_last5">5 derniers</th>
           </tr></thead>
           <tbody>${body}</tbody>
         </table>
+        <div class="matches-block">${ldnMatchRows(matches)}</div>
       </div>`;
     }).join('');
   }
@@ -2325,6 +2372,10 @@ function launchConfetti() { Confetti.champion(); }
 
 /* === Detect champion when final is set === */
 function checkChampion() {
+  // la célébration champion du monde n'appartient qu'à la CDM :
+  // en mode Ligue des Nations, aucun confetti ni toast (le bracket CDM
+  // reste rempli en mémoire mais n'est plus la compétition affichée).
+  if (window.COMP && window.COMP.mode === 'ldn') return;
   const fin = koState.fin;
   if (fin && fin.status === 'done' && fin.s1 !== '' && fin.s2 !== '') {
     const champ = fin.winner || (parseInt(fin.s1) > parseInt(fin.s2) ? fin.t1 : parseInt(fin.s2) > parseInt(fin.s1) ? fin.t2 : '');
