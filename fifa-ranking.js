@@ -50,6 +50,7 @@
   const KO60 = { quarterfinals:1, semifinals:1, '3rd-place-match':1, final:1 }; // I=60 dès les quarts
   const We = (a, b) => 1 / (Math.pow(10, -(a - b) / 600) + 1);
   const frOf = (dn) => (window.TEAM_FR && window.TEAM_FR[dn]) || dn;
+  const isLdn = () => !!(window.COMP && window.COMP.mode === 'ldn');   // compétition affichée
   const flag = (iso, w) => iso ? 'https://flagcdn.com/w' + w + '/' + iso + '.png' : '';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   // couleur du résultat d'un point de trajectoire : victoire verte / défaite rouge /
@@ -177,6 +178,9 @@
       + '<div id="fr-body"></div></div>'
       + '<div class="fr-empty" id="fr-empty" style="display:none">' + t('ranking_none') + '</div>'
       + (widget ? '<button class="fr-expand-btn" id="fr-expand" type="button"></button>' : '')
+      // mode 🇪🇺 Nations : le classement reste celui de la CDM (la Ligue des
+      // Nations a d'autres coefficients d'importance, elle n'est pas comptée)
+      + (isLdn() ? '<div class="fr-note fr-note-ldn">' + t('ranking_ldn_note') + '</div>' : '')
       + '<div class="fr-note">' + t('ranking_note') + '</div>';
     const input = _host.querySelector('#fr-search');
     input.value = _query;
@@ -453,6 +457,7 @@
 .fr-next { color: var(--muted, #8fa3b5); }
 .fr-pts { font-family: var(--font-d, 'Bebas Neue', sans-serif); font-size: 1.18em; color: var(--gold, #fbc531); text-align: right; }
 .fr-note { text-align: center; color: var(--muted, #8fa3b5); font-size: 0.72em; margin-top: 14px; line-height: 1.6; }
+.fr-note-ldn { color: var(--gold, #fbc531); background: rgba(251,197,49,0.08); border: 1px solid rgba(251,197,49,0.25); border-radius: 10px; padding: 8px 12px; margin-top: 12px; }
 .fr-empty { text-align: center; color: var(--muted, #8fa3b5); padding: 26px 10px; font-size: 0.9em; }
 /* recherche (styles autonomes, identiques au filtre du Tracker) */
 .fr-search-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
