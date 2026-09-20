@@ -27,9 +27,9 @@
 <script src="team-data.js?v=1"></script>
 <script src="ldn-data.js?v=2"></script>
 <script src="competition.js?v=3"></script>
-<script src="i18n.js?v=32"></script>
+<script src="i18n.js?v=33"></script>
 <script src="events.js?v=3"></script>
-<script src="fifa-ranking.js?v=2"></script>
+<script src="fifa-ranking.js?v=3"></script>
 <!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
 <script type="importmap">
 { "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
@@ -469,8 +469,18 @@ body {
 .ldn-legend .ldn-lg-key.up { background: var(--green-b, #2ed573); margin-left: 10px; }
 .ldn-legend .ldn-lg-key.down { background: var(--red); margin-left: 14px; }
 .go-section-title { font-family: var(--font-d); font-size: 1.8em; letter-spacing: 0.05em; color: #fff; margin-bottom: 16px; }
-/* mode 🇪🇺 Nations : les 12 groupes CDM laissent la place à la section LdN */
+/* Chaque compétition n'affiche QUE ses propres sections :
+   🏆 CDM → les 12 groupes ; 🇪🇺 Nations → les 14 groupes de la LdN. */
 html[data-comp="ldn"] .groups-overview { display: none; }
+html[data-comp="wc"] .ldn-section { display: none; }
+/* Bandeau compétition sous le titre : marque la différence CDM ⇄ Nations */
+.comp-banner { display: inline-flex; align-items: center; gap: 10px; margin-top: 14px; padding: 7px 16px; border-radius: 30px;
+  font-size: 0.72em; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
+.comp-banner .cb-hint { font-weight: 600; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; font-size: 0.92em; }
+html[data-comp="wc"] .comp-banner { color: var(--gold); background: rgba(251,197,49,0.1); border: 1px solid rgba(251,197,49,0.35); }
+html[data-comp="ldn"] .comp-banner { color: #9fd0ff; background: rgba(0,87,184,0.18); border: 1px solid rgba(120,180,255,0.4); }
+/* accent LdN sur le titre de section + le badge du bloc LIVE */
+html[data-comp="ldn"] .ldn-section .go-section-title { color: #9fd0ff; }
 .groups-overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; }
 .go-card { background: rgba(15,25,35,0.7); border: 1px solid var(--border); border-radius: 18px; overflow: hidden; backdrop-filter: blur(8px); transition: border-color 0.2s, transform 0.2s; }
 .go-card:hover { border-color: rgba(251,197,49,0.35); transform: translateY(-2px); }
@@ -689,6 +699,8 @@ html[data-comp="ldn"] .groups-overview { display: none; }
 <div class="header">
   <h1 id="hero-title"></h1>
   <p data-i18n="subtitle_dash">Statistiques & Calendrier en temps réel</p>
+  <div class="comp-banner"><span id="comp-banner-label" data-i18n="comp_banner_ldn">🇪🇺 Ligue des Nations 2026-27 · phase de ligue</span>
+    <span class="cb-hint" data-i18n="comp_switch_hint">Bascule 🏆/🇪🇺 en haut à gauche</span></div>
 </div>
 
 <div id="fav-hero"></div>
@@ -739,7 +751,7 @@ html[data-comp="ldn"] .groups-overview { display: none; }
 </section>
 
 <section class="flag-loop-section">
-  <div class="flag-loop-label" data-i18n="flag_loop_label">⚽ Les 48 nations · clique sur un drapeau</div>
+  <div class="flag-loop-label" id="flag-loop-label" data-i18n="flag_loop_label">⚽ Les 48 nations · clique sur un drapeau</div>
   <div class="flag-loop">
     <div class="flag-loop-track" id="flag-loop-track"></div>
   </div>
@@ -921,7 +933,8 @@ const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return
 let _allEvents = null;
 async function loadAllResults() {
   try {
-    const res = await fetch(`${ESPN_ENDPOINT}?dates=20260611-20260720&limit=500`, { cache: 'no-store', signal: tmo(12000) });
+    // saison entière : ESPN refuse désormais les plages `dates=AAAAMMJJ-AAAAMMJJ` (HTTP 400)
+    const res = await fetch(`${ESPN_ENDPOINT}?dates=2026&limit=1000`, { cache: 'no-store', signal: tmo(12000) });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();
     _allEvents = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
@@ -1332,13 +1345,36 @@ const ISO = {
   'Portugal':'pt','RD Congo':'cd','Ouzbékistan':'uz','Colombie':'co',
   'Angleterre':'gb-eng','Croatie':'hr','Ghana':'gh','Panama':'pa',
 };
-const flagUrl = (name, w = 80) => `https://flagcdn.com/w${w}/${ISO[name] || ''}.png`;
+// ISO local (48 nations CDM) puis TEAM_ISO (toutes les sélections, dont les 54 UEFA)
+const isoOfName = (name) => ISO[name] || (window.TEAM_ISO && window.TEAM_ISO[name]) || '';
+const flagUrl = (name, w = 80) => `https://flagcdn.com/w${w}/${isoOfName(name)}.png`;
 const groupOf = (name) => Object.keys(WC_GROUPS).find(g => WC_GROUPS[g].includes(name));
+
+/* Compétition affichée (toggle 🏆/🇪🇺) : le dashboard ne montre QUE ses nations,
+   ses groupes et ses libellés — la CDM et la Ligue des Nations ne se mélangent pas. */
+const IS_LDN = !!(window.COMP && window.COMP.mode === 'ldn');
+// 54 nations UEFA (ordre du tirage) en mode Nations, 48 nations CDM sinon
+const COMP_NATIONS = () => (IS_LDN && window.LDN_DATA)
+  ? window.LDN_DATA.GROUPS.reduce((a, g) => a.concat(g[2]), [])
+  : Object.values(WC_GROUPS).flat();
+// fiche équipe correspondante (paillettes CDM ⇄ paillettes LdN)
+const openCompCard = (n) => (IS_LDN && window.openLdnCard) ? openLdnCard(n) : openCountryCard(n);
+
+(function compBanner() {
+  const setKey = (id, key) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.setAttribute('data-i18n', key);                    // suit les changements de langue
+    if (window.t) el.textContent = window.t(key);
+  };
+  setKey('comp-banner-label', IS_LDN ? 'comp_banner_ldn' : 'comp_banner_wc');
+  setKey('flag-loop-label', IS_LDN ? 'flag_loop_label_ldn' : 'flag_loop_label');
+})();
 
 (function buildFlagLoop() {
   const track = document.getElementById('flag-loop-track');
   if (!track) return;
-  const allNations = Object.values(WC_GROUPS).flat(); // 48 in group order
+  const allNations = COMP_NATIONS(); // 48 (CDM) ou 54 (LdN), dans l'ordre du tirage
   const chip = (name) =>
     `<div class="flag-chip" data-country="${name.replace(/"/g, '&quot;')}" title="${name}">
        <img src="${flagUrl(name, 80)}" srcset="${flagUrl(name, 160)} 2x" alt="${name}"
@@ -1359,7 +1395,7 @@ const groupOf = (name) => Object.keys(WC_GROUPS).find(g => WC_GROUPS[g].includes
   // Event delegation → open the PixelCard for the clicked nation
   track.addEventListener('click', (e) => {
     const chipEl = e.target.closest('.flag-chip');
-    if (chipEl) openCountryCard(chipEl.dataset.country);
+    if (chipEl) openCompCard(chipEl.dataset.country);
   });
 })();
 
@@ -1372,7 +1408,7 @@ let FAV = localStorage.getItem(FAV_KEY) || '';
 function buildFavGrid() {
   const grid = document.getElementById('fav-grid');
   if (!grid) return;
-  const all = Object.values(WC_GROUPS).flat().sort((a, b) => a.localeCompare(b, 'fr'));
+  const all = COMP_NATIONS().slice().sort((a, b) => a.localeCompare(b, 'fr'));
   grid.innerHTML = all.map(n => `
     <button class="fav-opt" data-country="${n.replace(/"/g, '&quot;')}" onclick="setFav(this.dataset.country)">
       <img src="${flagUrl(n, 80)}" srcset="${flagUrl(n, 160)} 2x" alt="" loading="lazy" decoding="async" onerror="this.style.display='none'">
@@ -1466,6 +1502,10 @@ function renderFavHero() {
       grpLine = window.t('comp_ldn');
       meta = window.t('ldn_fav_none'); // sélection hors UEFA (ex : Brésil)
     }
+  } else if (!groupOf(FAV)) {
+    // 🏆 mode CDM avec une sélection choisie côté Nations (ex : Écosse)
+    grpLine = window.t('comp_wc');
+    meta = window.t('wc_fav_none');
   } else {
   // Phase d'une rencontre via le season.slug ESPN
   const PHASES = {
@@ -1532,13 +1572,13 @@ function syncLanyard() {
   const lgrp = (LDN_MODE && window.LDN_DATA) ? window.LDN_DATA.groupOf(FAV) : null;
   window.CDMLanyard.mount(stage, {
     key: FAV + '|' + lang + (LDN_MODE ? '|ldn' : ''), // rebuild si pays, langue ou compétition change
-    country: FAV, iso: ISO[FAV] || '',
+    country: FAV, iso: isoOfName(FAV),
     group: LDN_MODE ? (lgrp ? `${lgrp.lg} · ${window.t('group')} ${lgrp.num}` : '') : (groupOf(FAV) || ''),
     flag: flagUrl(FAV, 320),
     compLabel: LDN_MODE ? window.t('lanyard_comp_ldn') : window.t('lanyard_comp'),
     roleLabel: window.t('lanyard_role'),
     groupLabel: LDN_MODE ? (lgrp ? window.t('ldn_league') : '') : window.t('fav_group'),
-    serial: (LDN_MODE && lgrp ? 'UNL-' : 'FWC-') + (ISO[FAV] || 'XX').toUpperCase() + '-26',
+    serial: (LDN_MODE && lgrp ? 'UNL-' : 'FWC-') + (isoOfName(FAV) || 'XX').toUpperCase() + '-26',
     strapColors: teamColorsOf(FAV) || undefined, // cordon aux couleurs (si déjà connues)
     onClick: () => { if (LDN_MODE && lgrp && window.openLdnCard) openLdnCard(FAV); else openCountryCard(FAV); }
   });
@@ -1665,12 +1705,16 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
   });
 
   // premiers matchs (1re journée) depuis ESPN — dégrade proprement si l'API échoue
-  fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?dates=20260924-20261117&limit=500', { cache: 'no-store', signal: tmo(12000) })
+  // saison 2026-27 complète (`dates=2026`) — les plages de dates renvoient HTTP 400
+  fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?dates=2026&limit=1000', { cache: 'no-store', signal: tmo(12000) })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(data => {
       const evs = (data.events || [])
         .filter(e => e && e.competitions && e.competitions[0] && (e.competitions[0].competitors || []).length >= 2
-          && e.competitions[0].competitors.every(c => c && c.team))
+          && e.competitions[0].competitors.every(c => c && c.team)
+          // la saison ESPN 2026 inclut les barrages de relégation de mars 2026
+          // (fin du cycle 2024-25) : hors de cette édition
+          && (e.date || '') >= '2026-09-01')
         .sort((a, b) => new Date(a.date) - new Date(b.date));
       const stds = computeLdnStandings(evs);
       renderLdnGroups(stds); // classement à jour (dès qu'il y a des résultats)
