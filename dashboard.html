@@ -25,10 +25,11 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="ldn-data.js?v=2"></script>
+<script src="ldn-data.js?v=3"></script>
 <script src="competition.js?v=3"></script>
-<script src="i18n.js?v=33"></script>
-<script src="events.js?v=3"></script>
+<script src="i18n.js?v=34"></script>
+<script src="events.js?v=4"></script>
+<script src="match-sheet.js?v=1"></script>
 <script src="fifa-ranking.js?v=3"></script>
 <!-- Lanyard 3D du favori (portage vanilla Three.js du composant ReactBits) -->
 <script type="importmap">
@@ -106,6 +107,7 @@ body {
 .live-card.size-full { flex-direction: row; align-items: center; flex-wrap: wrap; gap: 18px 28px; }
 .live-card.size-full .live-card-teams { flex: 1 1 320px; }
 .live-card.size-full .live-team-score { font-size: 2.6em; }
+.live-card.is-sheet { cursor: pointer; }
 
 .live-card {
   background: rgba(15, 25, 35, 0.7);
@@ -1196,6 +1198,9 @@ function buildLiveCard(ev, idx, sizeClass) {
   if (isFav) card.dataset.favLabel = '★ ' + window.t('fav_label'); // texte du ruban (localisé)
   card.style.animationDelay = (0.05 + idx * 0.05) + 's';
   card.dataset.eventId = ev.id;
+  card.dataset.ev = ev.id;              // feuille de match ESPN au clic
+  card.classList.add('is-sheet');
+  card.title = window.t('sheet_open');
 
   const venue = comp.venue || ev.venue || {};
   const venueName = venue.fullName || '';
@@ -1398,6 +1403,13 @@ const openCompCard = (n) => (IS_LDN && window.openLdnCard) ? openLdnCard(n) : op
     if (chipEl) openCompCard(chipEl.dataset.country);
   });
 })();
+
+/* Clic sur une carte LIVE → feuille de match ESPN complète
+   (fil du match, statistiques, compositions, commentaire). */
+document.addEventListener('click', (e) => {
+  const t = e.target.closest('.is-sheet[data-ev]');
+  if (t && window.MatchSheet) MatchSheet.open(t.dataset.ev);
+});
 
 /* ===========================================================
    MA SÉLECTION FAVORITE — choix à la 1re visite + suivi spécial
