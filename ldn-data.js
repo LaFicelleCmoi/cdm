@@ -7,7 +7,7 @@
      frName(en)       -> nom FR (via TEAM_FR, sinon le nom ESPN),
      standings(events)-> [{ lg, num, played,
                             rows    : [{fr,p,w,d,l,gf,ga,gd,pts,form:['W','D',…]}],
-                            matches : [{t1,t2,s1,s2,state,date}] }]
+                            matches : [{id,t1,t2,s1,s2,state,date}] }]
    }
    Règles phase de ligue : 3/1/0 pts, nuls autorisés (pas de t.a.b.),
    matchs terminés uniquement, tri Pts › différence › BM › alphabétique
@@ -65,6 +65,7 @@
       var sA = parseInt(cs[0].score, 10), sB = parseInt(cs[1].score, 10);
       var has = st !== 'pre' && !isNaN(sA) && !isNaN(sB);
       M[gA.lg + gA.num].push({
+        id: e.id,                     // ouvre la feuille de match ESPN
         t1: frA, t2: frB,
         s1: has ? sA : null, s2: has ? sB : null,
         state: st === 'post' ? 'done' : (st === 'in' ? 'live' : 'pending'),
