@@ -5,7 +5,10 @@
    Expose window.MatchEvents.
    ============================================================ */
 (function () {
-  const EP = 'https://site.api.espn.com/apis/site/v2/sports/soccer/fifa.world/summary?event=';
+  // la compétition affichée pilote l'endpoint : un match de Ligue des Nations
+  // n'existe pas dans le flux `fifa.world` (summary vide → aucun buteur)
+  const EP = () => 'https://site.api.espn.com/apis/site/v2/sports/soccer/'
+    + ((window.COMP && window.COMP.slug) || 'fifa.world') + '/summary?event=';
   const cache = {}; // eventId -> { ts, list }
   // Timeout sûr pour fetch (évite les requêtes qui pendent indéfiniment quand ESPN rame)
   const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } };
@@ -58,7 +61,7 @@
     const c = cache[eventId];
     if (c && (Date.now() - c.ts) < maxAgeMs) return c.list;
     try {
-      const res = await fetch(EP + eventId, { cache: 'no-store', signal: tmo(8000) });
+      const res = await fetch(EP() + eventId, { cache: 'no-store', signal: tmo(8000) });
       if (!res.ok) throw new Error('HTTP ' + res.status);
       const data = await res.json();
       const list = normalize(data.keyEvents);
