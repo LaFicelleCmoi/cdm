@@ -632,16 +632,21 @@ html[data-comp="ldn"] .ldn-section .go-section-title { color: #9fd0ff; }
 .pixel-card {
   position: relative; width: 340px; max-width: calc(100vw - 40px); min-height: 453px;
   border-radius: 24px; overflow: hidden; isolation: isolate;
-  border: 1px solid rgba(251,197,49,0.35);
+  border: 1px solid rgba(251,197,49,0.22);
   background: radial-gradient(circle at 50% 0%, #16212e, #070d12 75%);
-  box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 50px rgba(251,197,49,0.12), inset 0 1px 0 rgba(255,255,255,0.08);
+  box-shadow: 0 30px 80px rgba(0,0,0,0.7), 0 0 40px rgba(251,197,49,0.07), inset 0 1px 0 rgba(255,255,255,0.06);
   animation: cardPop 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 @keyframes cardPop { from { opacity: 0; transform: translateY(24px) scale(0.92); } to { opacity: 1; transform: none; } }
 /* transform:translateZ(0) = couche compositeur dediee : les repeints du canvas
    restent sur son propre calque GPU et ne forcent plus le re-flou du backdrop
    plein ecran derriere la modale (cause majeure du lag PC / grand ecran). */
-.pixel-card > canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; transform: translateZ(0); will-change: transform; contain: strict; }
+/* Champ de pixels DISCRET : opacité basse + fondu radial (les pastilles
+   s'effacent derrière le drapeau et le texte, et ne subsistent qu'en périphérie). */
+.pixel-card > canvas { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; transform: translateZ(0); will-change: transform; contain: strict;
+  opacity: 0.3;
+  -webkit-mask-image: radial-gradient(ellipse 72% 58% at 50% 46%, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0.45) 55%, #000 100%);
+  mask-image: radial-gradient(ellipse 72% 58% at 50% 46%, rgba(0,0,0,0.12) 0%, rgba(0,0,0,0.45) 55%, #000 100%); }
 
 .pixel-card-inner { position: relative; z-index: 1; min-height: 453px; display: flex; flex-direction: column; align-items: center; justify-content: space-between; gap: 14px; padding: 28px 22px 22px; text-align: center; pointer-events: none; }
 
@@ -1970,7 +1975,7 @@ function attachPixelCanvas(canvas, colors, { gap = 5, speed = 0.07 } = {}) {
   function startTwinkle() {
     if (_reduceMotion || !pixels.length) return;   // accessibilité : image figée
     stop();
-    const n = Math.max(24, Math.min(48, Math.round(pixels.length * 0.02)));
+    const n = Math.max(12, Math.min(26, Math.round(pixels.length * 0.012)));
     tws = Array.from({ length: n }, newTw);
     lastT = 0;
     raf = requestAnimationFrame(twinkleLoop);
@@ -1984,15 +1989,15 @@ function attachPixelCanvas(canvas, colors, { gap = 5, speed = 0.07 } = {}) {
       tw.t += 1 / tw.dur;
       if (tw.t < 0) continue;                      // départ décalé (évite le tir groupé)
       const p = tw.p, cx = p.x + p.maxSizeInteger * 0.5, cy = p.y + p.maxSizeInteger * 0.5;
-      ctx.clearRect(cx - 4, cy - 4, 8, 8);         // efface SA cellule seulement (gap=8)
+      ctx.clearRect(cx - gap / 2, cy - gap / 2, gap, gap); // efface SA cellule seulement
       p.size = p.maxSize; p.draw();                // repeint le pixel de base
       if (tw.t >= 1) { Object.assign(tw, newTw()); continue; } // paillette suivante
       const k = Math.sin(Math.PI * tw.t);          // pulse 0→1→0
-      const s = p.maxSize + 1.8 * k;
-      ctx.globalAlpha = 0.35 + 0.65 * k;
-      ctx.fillStyle = mixWhite(p.color, 0.55 * k);
+      const s = p.maxSize + 1.1 * k;
+      ctx.globalAlpha = 0.25 + 0.45 * k;
+      ctx.fillStyle = mixWhite(p.color, 0.4 * k);
       ctx.fillRect(cx - s / 2, cy - s / 2, s, s);
-      if (k > 0.65) {                              // cœur blanc au pic = étincelle
+      if (k > 0.88) {                              // cœur blanc au pic = étincelle
         ctx.fillStyle = '#fff';
         const c2 = s * 0.38;
         ctx.fillRect(cx - c2 / 2, cy - c2 / 2, c2, c2);
@@ -2222,7 +2227,7 @@ function openCountryCard(name) {
   // gap 5→7 : ~2× moins de pixels à animer, densité visuelle quasi identique
   // gap 8 : champ plus dense = plus vivant. Sans surcoût : seul le scintillement
   // (~36 paillettes) travaille en continu, pas le fond.
-  _pixelCtl = attachPixelCanvas(canvas, palette, { gap: 8, speed: 0.08 });
+  _pixelCtl = attachPixelCanvas(canvas, palette, { gap: 11, speed: 0.08 });
   _pixelCtl.build();   // synchrone : getBoundingClientRect force le layout → canvas dimensionné
   _pixelCtl.appear();  // reveal animé on open
   // Survol volontairement DÉSACTIVÉ : sur PC, mouseenter/mouseleave relançaient
@@ -2330,7 +2335,7 @@ function openLdnCard(name) {
     </div>`;
   backdrop.classList.add('open');
   const canvas = document.getElementById('pixel-card').querySelector('canvas');
-  _pixelCtl = attachPixelCanvas(canvas, ['#fbc531', '#f5d76e', '#ffffff', '#ff4757', '#ffd966'], { gap: 8, speed: 0.08 });
+  _pixelCtl = attachPixelCanvas(canvas, ['#fbc531', '#f5d76e', '#ffffff', '#ff4757', '#ffd966'], { gap: 11, speed: 0.08 });
   _pixelCtl.build(); _pixelCtl.appear();
   backdrop.onclick = (e) => { if (e.target === backdrop) closeCountryCard(); };
 }
