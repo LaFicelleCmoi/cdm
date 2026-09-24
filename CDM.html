@@ -2876,6 +2876,25 @@ document.addEventListener('langchange', renderScorers);
   let _busy = false;        // garde anti-chevauchement des fetch
   const lastScore = {}; // id -> "s1-s2" to bump on change
 
+  /* « Aujourd'hui » = la journée de PARIS. Sans paramètre, ESPN renvoie SA
+     journée (fuseau américain) : après minuit à Paris, le widget restait sur
+     les matchs de la veille. On interroge la date du jour ET la veille (un coup
+     d'envoi de 00 h-02 h à Paris tombe la veille en UTC), puis on filtre. */
+  const parisDayKey = (d) => {
+    try { return new Intl.DateTimeFormat('fr-CA', { timeZone: PARIS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); }
+    catch (e) { return new Date(d).toISOString().slice(0, 10); }
+  };
+  const espnDayParam = (d) => parisDayKey(d).replace(/-/g, '');
+  function msToParisMidnight() {                 // jusqu'au prochain 00 h 00 de Paris
+    let h = 0, m = 0, sec = 0;
+    try {
+      const p = new Intl.DateTimeFormat('fr-FR', { timeZone: PARIS_TZ, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+        .format(new Date()).split(':').map(Number);
+      h = p[0] || 0; m = p[1] || 0; sec = p[2] || 0;
+    } catch (e) { const n = new Date(); h = n.getHours(); m = n.getMinutes(); sec = n.getSeconds(); }
+    return (((23 - h) * 3600 + (59 - m) * 60 + (60 - sec)) * 1000) + 2000;
+  }
+
   const stateKey = (s) => s === 'in' ? 'in' : s === 'post' ? 'post' : 'pre';
   const parisTime = (iso) => {
     if (HAS_DAYJS) return dayjs(iso).tz(PARIS_TZ).format('HH:mm');
@@ -3228,9 +3247,19 @@ document.addEventListener('langchange', renderScorers);
     if (_busy) return; // évite d'empiler les requêtes si l'une est encore en cours
     _busy = true;
     try {
-      const res = await fetch(ENDPOINT, { cache: 'no-store', signal: tmo(8000) });
-      if (!res.ok) throw new Error('HTTP ' + res.status);
-      update(await res.json());
+      const now = new Date();
+      const days = [espnDayParam(new Date(now.getTime() - 86400000)), espnDayParam(now)];
+      const parts = await Promise.all(days.map(d =>
+        fetch(`${ENDPOINT}?dates=${d}`, { cache: 'no-store', signal: tmo(8000) })
+          .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+          .catch(() => null)
+      ));
+      if (parts.every(p => !p)) throw new Error('scoreboard indisponible');
+      const today = parisDayKey(now), byId = {};
+      parts.forEach(p => ((p && p.events) || []).forEach(e => {
+        if (e && e.id && parisDayKey(new Date(e.date)) === today) byId[e.id] = e;
+      }));
+      update({ events: Object.keys(byId).map(k => byId[k]) });
     } catch (err) {
       console.warn('Live widget fetch failed:', err);
       if (!el.querySelector('.lw-row')) el.className = 'live-widget'; // keep last good render, else stay hidden
@@ -3296,8 +3325,25 @@ document.addEventListener('langchange', renderScorers);
   }
   fetchLive().then(scheduleNextPoll); // 1er fetch, puis cadence selon présence de live
   catchUp(); // rattrapage complet à l'ouverture
+
+  /* Bascule AUTOMATIQUE à 00 h 00 (heure de Paris) : le widget passe aux matchs
+     du nouveau jour sans recharger la page (et se ré-arme pour la nuit suivante). */
+  let _widgetDay = parisDayKey(new Date());
+  function scheduleMidnightRollover() {
+    setTimeout(() => {
+      _widgetDay = parisDayKey(new Date());
+      rotateIdx = 0;
+      fetchLive();
+      scheduleMidnightRollover();
+    }, msToParisMidnight());
+  }
+  scheduleMidnightRollover();
+
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState !== 'visible') return;
+    // onglet resté ouvert pendant la nuit : on rattrape le changement de jour
+    const d = parisDayKey(new Date());
+    if (d !== _widgetDay) { _widgetDay = d; rotateIdx = 0; }
     fetchLive().then(scheduleNextPoll); // refresh immédiat + réajuste la cadence
     // au retour sur l'onglet (PC qui sort de veille…), re-rattrape si > 5 min
     if (Date.now() - _lastCatchUp > 300000) catchUp();
