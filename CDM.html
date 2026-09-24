@@ -26,7 +26,7 @@
 <script src="team-data.js?v=1"></script>
 <script src="ldn-data.js?v=3"></script>
 <script src="competition.js?v=3"></script>
-<script src="i18n.js?v=34"></script>
+<script src="i18n.js?v=35"></script>
 <script src="events.js?v=4"></script>
 <script src="match-sheet.js?v=1"></script>
 <script src="fifa-ranking.js?v=3"></script>
@@ -947,6 +947,8 @@ function formatPlanningDate(frStr) {
   /* ---- rendu partagé calendrier / phase finale : jours de matchs ---- */
   let LDN_EVS = [], LDN_KO = [], LDN_STAND = null;
   const LDN_START = '2026-09-01'; // 1re journée : 24/09/2026 (avant = cycle précédent)
+  // scoreboard par SAISON (`dates=AAAA`) : les plages de dates renvoient HTTP 400
+  const SB_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?limit=1000&dates=';
   const isKo = (e) => !!(e && e.season && e.season.slug && e.season.slug !== 'group-stage');
   const KO_PHASE = { 'quarterfinals': 'phase_qf', 'semifinals': 'phase_sf', '3rd-place-match': 'phase_3p', 'final': 'phase_final' };
 
@@ -1032,38 +1034,179 @@ function formatPlanningDate(frStr) {
   }
 
   /* ---- meilleurs buteurs LdN : agrégés depuis les details du scoreboard
-     (même technique que les buteurs CDM — une seule requête, zéro summary) ---- */
+     (même technique que les buteurs CDM — une requête par saison, zéro summary).
+     Deux onglets : « Tous les temps » (toutes les éditions depuis 2018-19,
+     totaux qui montent en direct) et la saison en cours. ---- */
+  const LDN_TOP = 16;
+  const LDN_FIRST_SEASON = 2018;              // 1re édition : 2018-19
+  const ALLTIME_KEY = 'ldn_alltime_v1';       // cache des éditions closes (figées)
+  const ALLTIME_TTL = 30 * 24 * 3600 * 1000;  // 30 jours
+  let ldnScorersMode = 'alltime';
+  let LDN_RAW = [];        // saison en cours, NON filtrée (barrages de mars inclus)
+  let _allTime = null;     // [{id,name,goals,team,first,last}] éditions closes
+  let _allTimeBusy = false, _allTimeErr = false;
+
+  // Une édition s'étale sur deux millésimes ESPN : la phase de ligue (2024) et
+  // le Final Four de juin (2025) → édition 2024-25. Les éditions démarrent les
+  // années paires depuis 2018-19.
+  function ldnEdition(y) { return y - ((y - LDN_FIRST_SEASON) % 2); }
+  function ldnEditionLabel(y) { const e = ldnEdition(y); return e + '-' + String(e + 1).slice(2); }
+
+  // saison ESPN en cours : le millésime démarre en juin (2026-27 → « 2026 »)
+  function ldnCurrentSeason() {
+    const d = new Date();
+    return d.getUTCMonth() >= 5 ? d.getUTCFullYear() : d.getUTCFullYear() - 1;
+  }
+  function ldnClosedSeasons() {
+    const out = [], cur = ldnCurrentSeason();
+    for (let y = LDN_FIRST_SEASON; y < cur; y++) out.push(y);
+    return out;
+  }
+
+  // agrège les buts d'une liste d'événements dans acc (buts réels uniquement :
+  // ni csc, ni tirs au but) — acc.byId[athleteId] = { name, goals, teamId, first, last }
+  function ldnAggregate(events, acc, season) {
+    (events || []).forEach(ev => {
+      const comp = ev && ev.competitions && ev.competitions[0];
+      if (!comp) return;
+      // un match de janvier-mai appartient à l'édition précédente (Final Four de
+      // juin, barrages de relégation de mars) : ESPN les range dans la saison suivante
+      let year = season;
+      try { if (new Date(ev.date).getUTCMonth() <= 4) year = season - 1; } catch (e) {}
+      (comp.competitors || []).forEach(c => { if (c.team && c.team.id) acc.teams[c.team.id] = c.team.displayName; });
+      (comp.details || []).forEach(d => {
+        if (!d || !d.scoringPlay || d.ownGoal || d.shootout) return;
+        const a = (d.athletesInvolved || [])[0];
+        if (!a || !a.id) return;
+        const e = acc.byId[a.id] || (acc.byId[a.id] = { name: a.displayName || a.fullName || '—', goals: 0, teamId: '', first: year, last: year });
+        e.goals++;
+        e.name = a.displayName || a.fullName || e.name;
+        e.teamId = (a.team && a.team.id) || (d.team && d.team.id) || e.teamId;
+        if (year < e.first) e.first = year;
+        if (year > e.last) e.last = year;
+      });
+    });
+    return acc;
+  }
+  const newAcc = () => ({ byId: {}, teams: {} });
+
+  // éditions closes : figées → cache localStorage (30 j), sinon 1 requête par saison
+  function loadLdnAllTime() {
+    if (_allTime || _allTimeBusy) return;
+    const closed = ldnClosedSeasons();
+    try {
+      const c = JSON.parse(localStorage.getItem(ALLTIME_KEY) || 'null');
+      if (c && c.upTo === closed[closed.length - 1] && (Date.now() - c.ts) < ALLTIME_TTL && c.rows) {
+        _allTime = c.rows; renderLdnScorers(); return;
+      }
+    } catch (e) {}
+    _allTimeBusy = true; _allTimeErr = false;
+    Promise.all(closed.map(y =>
+      fetch(SB_URL + y, { cache: 'no-store' })
+        .then(r => r.ok ? r.json() : { events: [] })
+        .then(j => ({ y: y, events: j.events || [] }))
+        .catch(() => ({ y: y, events: [] }))
+    )).then(res => {
+      const acc = newAcc();
+      res.forEach(r => ldnAggregate(r.events, acc, r.y));
+      const rows = Object.keys(acc.byId).map(id => {
+        const e = acc.byId[id];
+        return { id: id, name: e.name, goals: e.goals, team: acc.teams[e.teamId] || '', first: e.first, last: e.last };
+      }).filter(r => r.goals > 0);
+      _allTime = rows;
+      _allTimeErr = !rows.length;
+      try { localStorage.setItem(ALLTIME_KEY, JSON.stringify({ ts: Date.now(), upTo: closed[closed.length - 1], rows: rows })); } catch (e) {}
+    }).catch(() => { _allTimeErr = true; })
+      .then(() => { _allTimeBusy = false; renderLdnScorers(); });
+  }
+
+  // classement final : éditions closes + saison en cours (mise à jour en direct)
+  function ldnAllTimeList() {
+    const cur = ldnCurrentSeason();
+    const acc = newAcc();
+    ldnAggregate(LDN_RAW, acc, cur);
+    const byId = {};
+    (_allTime || []).forEach(r => { byId[r.id] = { name: r.name, goals: r.goals, team: r.team, first: r.first, last: r.last, live: false }; });
+    Object.keys(acc.byId).forEach(id => {
+      const e = acc.byId[id], t = acc.teams[e.teamId] || '';
+      const inEdition = ldnEdition(e.last) === ldnEdition(cur);   // édition en cours ?
+      if (byId[id]) {
+        byId[id].goals += e.goals;
+        byId[id].last = Math.max(byId[id].last, e.last);
+        byId[id].live = byId[id].live || inEdition;
+        if (t) byId[id].team = t;
+      } else {
+        byId[id] = { name: e.name, goals: e.goals, team: t, first: e.first, last: e.last, live: inEdition };
+      }
+    });
+    return Object.keys(byId).map(id => byId[id])
+      .sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name));
+  }
+
+  // buteurs de la saison en cours (phase de ligue + phase finale)
+  function ldnSeasonList() {
+    const acc = ldnAggregate(LDN_EVS, newAcc(), ldnCurrentSeason());
+    return Object.keys(acc.byId).map(id => {
+      const e = acc.byId[id];
+      return { name: e.name, goals: e.goals, team: acc.teams[e.teamId] || '', live: true };
+    }).sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name));
+  }
+
+  function ldnRows(list) {
+    let rank = 0, prev = null;                    // rang dense avec ex æquo
+    list.forEach((s, i) => { if (s.goals !== prev) { rank = i + 1; prev = s.goals; } s.rank = rank; });
+    const top = list.slice(0, LDN_TOP);
+    if (!top.length || typeof scorerRow !== 'function') return '';
+    const max = top[0].goals;
+    return `<div class="scorers-list">` + top.map(s => {
+      const fr = D.frName(s.team || '');
+      const iso = (window.TEAM_ISO && window.TEAM_ISO[fr]) || 'eu';
+      const span = (s.first && s.last)
+        ? (ldnEdition(s.first) === ldnEdition(s.last)
+            ? ldnEditionLabel(s.first)
+            : `${ldnEditionLabel(s.first)} → ${ldnEditionLabel(s.last)}`)
+        : '';
+      return scorerRow({
+        rank: s.rank, name: s.name, iso: iso, country: fr, goals: s.goals,
+        active: !!s.live, sub: fr + (span ? ' · ' + span : '')
+      }, max, { badge: !!span, badgeText: ldnEditionLabel(ldnCurrentSeason()) });
+    }).join('') + `</div>`;
+  }
+
   function renderLdnScorers() {
     const wrap = document.getElementById('ldn-scorers-wrap');
     if (!wrap) return;
-    const teamMap = {}, agg = {};
-    LDN_EVS.forEach(ev => {
-      const comp = ev.competitions[0];
-      (comp.competitors || []).forEach(c => { if (c.team && c.team.id) teamMap[c.team.id] = c.team.displayName; });
-      (comp.details || []).forEach(d => {
-        if (!d || !d.scoringPlay || d.ownGoal || d.shootout) return; // vrais buts uniquement
-        const a = (d.athletesInvolved || [])[0];
-        if (!a || !a.id) return;
-        if (!agg[a.id]) agg[a.id] = { name: a.displayName || a.fullName || '—', goals: 0, teamId: (a.team && a.team.id) || (d.team && d.team.id) || '' };
-        agg[a.id].goals++;
-      });
-    });
-    const list = Object.keys(agg).map(id => {
-      const s = agg[id];
-      const fr = D.frName(teamMap[s.teamId] || '');
-      return { name: s.name, goals: s.goals, country: fr, iso: (window.TEAM_ISO && window.TEAM_ISO[fr]) || 'eu' };
-    }).sort((a, b) => b.goals - a.goals || a.name.localeCompare(b.name));
-    let rank = 0, prev = null; // rang dense avec ex æquo
-    list.forEach((s, i) => { if (s.goals !== prev) { rank = i + 1; prev = s.goals; } s.rank = rank; });
-    const top = list.slice(0, 16);
-    const body = (top.length && typeof scorerRow === 'function')
-      ? `<div class="scorers-list">` + top.map(s => scorerRow({ rank: s.rank, name: s.name, iso: s.iso, country: s.country, goals: s.goals, sub: s.country }, top[0].goals, {})).join('') + `</div>`
-      : `<div class="scorers-loading">${esc(window.t('ldn_scorers_wait'))}</div>`;
+    const allTime = ldnScorersMode === 'alltime';
+    let body, sub, note = '';
+    if (allTime) {
+      sub = window.t('ldn_alltime_sub');
+      if (_allTime) {
+        body = ldnRows(ldnAllTimeList());
+        note = `<div class="scorers-note">${esc(window.t('ldn_alltime_note'))}</div>`;
+      } else if (_allTimeErr) {
+        body = `<div class="scorers-loading">⚠️ ${esc(window.t('scorers_live_fail'))}</div>`;
+      } else {
+        body = `<div class="scorers-loading"><span class="sc-spin">⚽</span> ${esc(window.t('scorers_loading'))}</div>`;
+        loadLdnAllTime();
+      }
+    } else {
+      sub = window.t('comp_ldn') + ' 2026-27';
+      body = ldnRows(ldnSeasonList()) || `<div class="scorers-loading">${esc(window.t('ldn_scorers_wait'))}</div>`;
+    }
     wrap.innerHTML = `
       <div class="scorers-head">
         <div class="scorers-title">🥇 ${window.t('scorers_title')}</div>
-        <div class="scorers-sub">${window.t('comp_ldn')} 2026-27</div>
-      </div>${body}`;
+        <div class="scorers-toggle">
+          <button class="sc-tg${allTime ? ' on' : ''}" data-mode="alltime">${window.t('scorers_tab_alltime')}</button>
+          <button class="sc-tg${allTime ? '' : ' on'}" data-mode="season">${window.t('scorers_tab_ldn')}</button>
+        </div>
+        <div class="scorers-sub">${esc(sub)}</div>
+      </div>${body}${note}`;
+    wrap.querySelectorAll('.sc-tg').forEach(b => b.addEventListener('click', () => {
+      if (b.dataset.mode === ldnScorersMode) return;
+      ldnScorersMode = b.dataset.mode;
+      renderLdnScorers();
+    }));
   }
 
   renderLdnGroupCards(null); // tirage immédiat (points à zéro, sans API)
@@ -1073,9 +1216,11 @@ function formatPlanningDate(frStr) {
   // ESPN ne répond plus aux plages `dates=AAAAMMJJ-AAAAMMJJ` (HTTP 400) : on
   // interroge la SAISON (`dates=2026` → tout le millésime 2026-27, soit les 156
   // matchs de phase de ligue + les barrages/quarts/Final Four dès leur annonce).
-  fetch('https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?dates=2026&limit=1000', { cache: 'no-store' })
+  function loadLdnSeason() {
+    return fetch(SB_URL + ldnCurrentSeason(), { cache: 'no-store' })
     .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
     .then(data => {
+      LDN_RAW = data.events || [];   // saison brute (sert au cumul « tous les temps »)
       LDN_EVS = (data.events || [])
         .filter(e => e && e.competitions && e.competitions[0] && (e.competitions[0].competitors || []).length >= 2
           && e.competitions[0].competitors.every(x => x && x.team)
@@ -1093,6 +1238,12 @@ function formatPlanningDate(frStr) {
       if (window.applyLang && window.getLang) window.applyLang(window.getLang());
     })
     .catch(err => { console.warn('LdN tracker:', err); renderLdnCalendar(); renderLdnKo(); renderLdnScorers(); });
+  }
+  loadLdnSeason();
+  // scores, classements et buteurs (saison ET tous les temps) suivent les matchs
+  // en direct : rafraîchissement tant que l'onglet est au premier plan
+  setInterval(() => { if (document.visibilityState === 'visible') loadLdnSeason(); }, 60000);
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') loadLdnSeason(); });
   // dates/heures/libellés relocalisés au changement de langue
   window.addEventListener('langchange', () => { renderLdnCalendar(); renderLdnKo(); renderLdnScorers(); });
 })();
@@ -2536,7 +2687,7 @@ function scorerRow(s, max, opts) {
   const flag = opts.round
     ? `<img class="scorer-flag round" src="${esc2(s.flag)}" alt="${esc2(s.country)}" title="${esc2(s.country)}" onerror="this.style.visibility='hidden'">`
     : `<img class="scorer-flag" src="https://flagcdn.com/w80/${s.iso}.png" srcset="https://flagcdn.com/w160/${s.iso}.png 2x" alt="${esc2(s.country)}" title="${esc2(s.country)}" onerror="this.style.visibility='hidden'">`;
-  const badge = (s.active && opts.badge) ? ` <span class="scorer-live" title="${esc2(window.t('scorers_active'))}">2026</span>` : '';
+  const badge = (s.active && opts.badge) ? ` <span class="scorer-live" title="${esc2(window.t('scorers_active'))}">${esc2(opts.badgeText || '2026')}</span>` : '';
   return `
     <div class="${cls}">
       <div class="scorer-rank">${scMedal(s.rank)}</div>
