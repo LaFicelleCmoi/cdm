@@ -27,7 +27,7 @@
 <script src="team-data.js?v=1"></script>
 <script src="ldn-data.js?v=3"></script>
 <script src="competition.js?v=3"></script>
-<script src="i18n.js?v=35"></script>
+<script src="i18n.js?v=36"></script>
 <script src="events.js?v=4"></script>
 <script src="match-sheet.js?v=1"></script>
 <script src="fifa-ranking.js?v=3"></script>
@@ -476,6 +476,22 @@ body {
 html[data-comp="ldn"] .groups-overview { display: none; }
 html[data-comp="wc"] .ldn-section { display: none; }
 /* Bandeau compétition sous le titre : marque la différence CDM ⇄ Nations */
+/* Bandeau de chiffres clés (compétition affichée) */
+.kpi-row { max-width: 1200px; margin: 0 auto 34px; display: grid; gap: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
+.kpi { position: relative; background: rgba(15,25,35,0.7); border: 1px solid var(--border); border-radius: 16px;
+  padding: 16px 18px; backdrop-filter: blur(8px); overflow: hidden; }
+.kpi-value { font-size: 2em; font-weight: 800; line-height: 1.05; color: var(--white); }
+.kpi-label { margin-top: 6px; font-size: 0.82em; font-weight: 600; color: var(--muted); line-height: 1.35; }
+.kpi-sub { margin-top: 6px; font-size: 0.72em; color: rgba(138,155,176,0.85); line-height: 1.35; }
+/* une seule tuile porte l'accent : le total de buts */
+.kpi.is-accent { border-color: rgba(251,197,49,0.28); }
+.kpi.is-accent::before { content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--gold); }
+.kpi.is-accent .kpi-value { color: var(--gold); }
+html[data-comp="ldn"] .kpi.is-accent { border-color: rgba(120,180,255,0.3); }
+html[data-comp="ldn"] .kpi.is-accent::before { background: #9fd0ff; }
+html[data-comp="ldn"] .kpi.is-accent .kpi-value { color: #9fd0ff; }
+@media (max-width: 520px) { .kpi-row { grid-template-columns: repeat(2, 1fr); } .kpi-value { font-size: 1.7em; } }
 .comp-banner { display: inline-flex; align-items: center; gap: 10px; margin-top: 14px; padding: 7px 16px; border-radius: 30px;
   font-size: 0.72em; font-weight: 800; letter-spacing: 0.1em; text-transform: uppercase; }
 .comp-banner .cb-hint { font-weight: 600; letter-spacing: 0.04em; text-transform: none; opacity: 0.75; font-size: 0.92em; }
@@ -704,6 +720,8 @@ html[data-comp="ldn"] .ldn-section .go-section-title { color: #9fd0ff; }
   <div class="comp-banner"><span id="comp-banner-label" data-i18n="comp_banner_ldn">🇪🇺 Ligue des Nations 2026-27 · phase de ligue</span>
     <span class="cb-hint" data-i18n="comp_switch_hint">Bascule 🏆/🇪🇺 en haut à gauche</span></div>
 </div>
+
+<section class="kpi-row" id="kpi-row"></section>
 
 <div id="fav-hero"></div>
 <div id="toast-stack"></div>
@@ -941,6 +959,7 @@ async function loadAllResults() {
     const data = await res.json();
     _allEvents = (data.events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type);
     if (window.updateFifaRanking) window.updateFifaRanking(_allEvents); // classement FIFA en direct
+    if (typeof renderKpis === 'function') renderKpis();                  // chiffres clés (buts, matchs)
     if (typeof renderFavHero === 'function') renderFavHero(); // prochain match du favori dispo
 
     // si une carte pays est ouverte, on rafraîchit son parcours (+ on re-dimensionne le canvas pixel)
@@ -1071,6 +1090,7 @@ async function fetchLiveScores(manual = false) {
     // qu'avec des matchs de Coupe du Monde, jamais avec la Ligue des Nations
     if (ACTIVE_SLUG === 'fifa.world' && window.updateFifaRanking) window.updateFifaRanking(data.events || []);
     renderLiveScores(data, manual);
+    if (typeof renderKpis === 'function') renderKpis(); // matchs/buts du jour en direct
   } catch (err) {
     console.warn('ESPN fetch failed:', err);
     renderLiveError();
@@ -1365,6 +1385,70 @@ const COMP_NATIONS = () => (IS_LDN && window.LDN_DATA)
 // fiche équipe correspondante (paillettes CDM ⇄ paillettes LdN)
 const openCompCard = (n) => (IS_LDN && window.openLdnCard) ? openLdnCard(n) : openCountryCard(n);
 
+/* ===========================================================
+   CHIFFRES CLÉS — bandeau de tuiles sous le titre, alimenté par la
+   compétition affichée : groupes, nations, matchs et buts du jour,
+   et total de buts (avec la moyenne par match).
+   =========================================================== */
+// saison de la compétition affichée + le flux LIVE du jour (plus frais) par-dessus
+function _compEvents() {
+  const base = IS_LDN ? ((window.LDN && window.LDN.events) || []) : (_allEvents || []);
+  const live = (_lastLiveData && _lastLiveData.events) || [];
+  if (!live.length) return base;
+  const byId = {};
+  base.forEach(e => { if (e && e.id) byId[e.id] = e; });
+  live.forEach(e => { if (e && e.id) byId[e.id] = e; });
+  return Object.keys(byId).map(k => byId[k]);
+}
+const _stateOfEv = (e) => {
+  const c = e && e.competitions && e.competitions[0];
+  return (c && c.status && c.status.type && c.status.type.state) || 'pre';
+};
+const _dayKeyParis = (d) => {
+  try { return new Intl.DateTimeFormat('fr-CA', { timeZone: PARIS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); }
+  catch (e) { return new Date(d).toISOString().slice(0, 10); }
+};
+const _goalsOf = (e) => (e.competitions[0].competitors || [])
+  .reduce((n, c) => n + (isNaN(parseInt(c.score, 10)) ? 0 : parseInt(c.score, 10)), 0);
+
+function renderKpis() {
+  const host = document.getElementById('kpi-row');
+  if (!host) return;
+  const evs = _compEvents().filter(e => e && e.competitions && e.competitions[0]);
+  const today = _dayKeyParis(new Date());
+  const isToday = (e) => _dayKeyParis(new Date(e.date)) === today;
+  const started = (e) => { const st = _stateOfEv(e); return st === 'post' || st === 'in'; };
+
+  const todayEvs = evs.filter(isToday);
+  const todayGoals = todayEvs.filter(started).reduce((n, e) => n + _goalsOf(e), 0);
+  // matchs joués = terminés ET en cours : sinon le total de buts serait plus bas
+  // que celui du jour pendant une soirée de matchs
+  const played = evs.filter(started);
+  const totalGoals = played.reduce((n, e) => n + _goalsOf(e), 0);
+  const avg = played.length ? (totalGoals / played.length) : 0;
+  const nf = (n) => n.toLocaleString((window.getLang && window.getLang()) === 'en' ? 'en-GB' : 'fr-FR');
+  const avgTxt = avg.toLocaleString((window.getLang && window.getLang()) === 'en' ? 'en-GB' : 'fr-FR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  // 0 et 1 prennent le singulier en français
+  const one = (n) => n <= 1;
+
+  const tiles = [
+    { v: IS_LDN ? (window.LDN_DATA ? window.LDN_DATA.GROUPS.length : 14) : Object.keys(WC_GROUPS).length,
+      l: window.t(IS_LDN ? 'kpi_leagues' : 'kpi_groups') },
+    { v: COMP_NATIONS().length, l: window.t('kpi_nations') },
+    { v: todayEvs.length, l: window.t(one(todayEvs.length) ? 'kpi_match_today' : 'kpi_matches_today') },
+    { v: todayGoals, l: window.t(one(todayGoals) ? 'kpi_goal_today' : 'kpi_goals_today') },
+    { v: totalGoals, l: window.t('kpi_total_goals'), accent: true,
+      sub: played.length ? `${avgTxt} ${window.t('kpi_per_match')} · ${nf(played.length)} ${window.t(one(played.length) ? 'kpi_match_played' : 'kpi_matches_played')}` : '' }
+  ];
+  host.innerHTML = tiles.map(t => `
+    <div class="kpi${t.accent ? ' is-accent' : ''}">
+      <div class="kpi-value">${nf(t.v)}</div>
+      <div class="kpi-label">${escapeHTML(t.l)}</div>
+      ${t.sub ? `<div class="kpi-sub">${escapeHTML(t.sub)}</div>` : ''}
+    </div>`).join('');
+}
+window.addEventListener('langchange', renderKpis);
+
 (function compBanner() {
   const setKey = (id, key) => {
     const el = document.getElementById(id);
@@ -1375,6 +1459,8 @@ const openCompCard = (n) => (IS_LDN && window.openLdnCard) ? openLdnCard(n) : op
   setKey('comp-banner-label', IS_LDN ? 'comp_banner_ldn' : 'comp_banner_wc');
   setKey('flag-loop-label', IS_LDN ? 'flag_loop_label_ldn' : 'flag_loop_label');
 })();
+
+renderKpis();   // rendu immédiat : groupes et nations n'attendent pas l'API
 
 (function buildFlagLoop() {
   const track = document.getElementById('flag-loop-track');
@@ -1731,6 +1817,7 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
       const stds = computeLdnStandings(evs);
       renderLdnGroups(stds); // classement à jour (dès qu'il y a des résultats)
       window.LDN.events = evs; window.LDN.standings = stds; // pour la fiche équipe LdN
+      if (typeof renderKpis === 'function') renderKpis();   // chiffres clés en mode Nations
       // mode 🇪🇺 Nations : le bandeau sélection + le badge attendaient ces données
       if (window.COMP && window.COMP.mode === 'ldn' && typeof renderFavHero === 'function') renderFavHero();
       const legend = document.getElementById('ldn-legend');
