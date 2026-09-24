@@ -954,6 +954,28 @@ const ACTIVE_SLUG = (window.COMP && window.COMP.slug) || (Date.now() >= WC_LIVE_
 const LIVE_ENDPOINT = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/scoreboard`;
 const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } }; // timeout fetch sûr
 
+/* ---------- « Aujourd'hui » = la journée de PARIS ----------
+   Sans paramètre, ESPN renvoie SA journée (fuseau américain) : à 00 h 30 à
+   Paris, le bloc AUJOURD'HUI affichait encore les matchs de la veille, et
+   les matchs du soir n'y entraient qu'en fin d'après-midi. On interroge donc
+   explicitement la date du jour (et la veille, car un coup d'envoi de 00 h-02 h
+   à Paris tombe la veille en UTC), puis on ne garde que la journée de Paris. */
+const parisDayKey = (d) => {
+  try { return new Intl.DateTimeFormat('fr-CA', { timeZone: PARIS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); }
+  catch (e) { return new Date(d).toISOString().slice(0, 10); }
+};
+const espnDayParam = (d) => parisDayKey(d).replace(/-/g, '');
+// durée jusqu'au prochain 00 h 00 de Paris (+2 s de marge)
+function msToParisMidnight() {
+  let h = 0, m = 0, sec = 0;
+  try {
+    const parts = new Intl.DateTimeFormat('fr-FR', { timeZone: PARIS_TZ, hourCycle: 'h23', hour: '2-digit', minute: '2-digit', second: '2-digit' })
+      .format(new Date()).split(':').map(Number);
+    h = parts[0] || 0; m = parts[1] || 0; sec = parts[2] || 0;
+  } catch (e) { const n = new Date(); h = n.getHours(); m = n.getMinutes(); sec = n.getSeconds(); }
+  return (((23 - h) * 3600 + (59 - m) * 60 + (60 - sec)) * 1000) + 2000;
+}
+
 /* ---------- Résultats du tournoi (toute la période) → parcours des équipes ---------- */
 let _allEvents = null;
 async function loadAllResults() {
@@ -1087,9 +1109,20 @@ async function fetchLiveScores(manual = false) {
   const btn = document.getElementById('live-refresh-btn');
   if (btn) btn.classList.add('spinning');
   try {
-    const res = await fetch(LIVE_ENDPOINT, { cache: 'no-store', signal: tmo(8000) });
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    const data = await res.json();
+    const now = new Date();
+    const days = [espnDayParam(new Date(now.getTime() - 86400000)), espnDayParam(now)];
+    const parts = await Promise.all(days.map(d =>
+      fetch(`${LIVE_ENDPOINT}?dates=${d}`, { cache: 'no-store', signal: tmo(8000) })
+        .then(r => r.ok ? r.json() : Promise.reject(new Error('HTTP ' + r.status)))
+        .catch(() => null)
+    ));
+    if (parts.every(p => !p)) throw new Error('scoreboard indisponible');
+    const today = parisDayKey(now);
+    const byId = {};
+    parts.forEach(p => (p && p.events || []).forEach(e => {
+      if (e && e.id && parisDayKey(new Date(e.date)) === today) byId[e.id] = e;
+    }));
+    const data = { events: Object.keys(byId).map(k => byId[k]) };
     _lastLiveData = data;
     // le classement FIFA du site est calibré CDM (I=50/60) : on ne le nourrit
     // qu'avec des matchs de Coupe du Monde, jamais avec la Ligue des Nations
@@ -1329,8 +1362,31 @@ function startLivePolling() {
   }, 30000);
 }
 document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') fetchLiveScores();
+  if (document.visibilityState === 'visible') { rollOverIfNewDay(); fetchLiveScores(); }
 });
+
+/* Bascule AUTOMATIQUE à 00 h 00 (heure de Paris) : le bloc AUJOURD'HUI et les
+   chiffres clés passent aux matchs du nouveau jour sans recharger la page.
+   Un onglet laissé ouvert toute la nuit (ou un PC en veille) est rattrapé par
+   rollOverIfNewDay au retour au premier plan. */
+let _liveDay = parisDayKey(new Date());
+function rollOverIfNewDay() {
+  const d = parisDayKey(new Date());
+  if (d === _liveDay) return false;
+  _liveDay = d;
+  fetchLiveScores(true);
+  if (typeof renderKpis === 'function') renderKpis();
+  return true;
+}
+function scheduleMidnightRollover() {
+  setTimeout(() => {
+    _liveDay = parisDayKey(new Date());
+    fetchLiveScores(true);
+    if (typeof renderKpis === 'function') renderKpis();
+    scheduleMidnightRollover();          // se ré-arme pour la nuit suivante
+  }, msToParisMidnight());
+}
+scheduleMidnightRollover();
 // Re-render the live block instantly when the language changes (from cache), then refresh
 document.addEventListener('langchange', () => {
   // re-rend depuis le cache ; ne re-fetch que si aucun cache (évite les fetchs
@@ -1409,10 +1465,7 @@ const _stateOfEv = (e) => {
   const c = e && e.competitions && e.competitions[0];
   return (c && c.status && c.status.type && c.status.type.state) || 'pre';
 };
-const _dayKeyParis = (d) => {
-  try { return new Intl.DateTimeFormat('fr-CA', { timeZone: PARIS_TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(d); }
-  catch (e) { return new Date(d).toISOString().slice(0, 10); }
-};
+const _dayKeyParis = parisDayKey;   // même journée de référence que le bloc LIVE
 const _goalsOf = (e) => (e.competitions[0].competitors || [])
   .reduce((n, c) => n + (isNaN(parseInt(c.score, 10)) ? 0 : parseInt(c.score, 10)), 0);
 
