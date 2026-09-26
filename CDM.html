@@ -949,7 +949,12 @@ function formatPlanningDate(frStr) {
   const LDN_START = '2026-09-01'; // 1re journée : 24/09/2026 (avant = cycle précédent)
   // scoreboard par SAISON (`dates=AAAA`) : les plages de dates renvoient HTTP 400
   const SB_URL = 'https://site.api.espn.com/apis/site/v2/sports/soccer/uefa.nations/scoreboard?limit=1000&dates=';
-  const isKo = (e) => !!(e && e.season && e.season.slug && e.season.slug !== 'group-stage');
+  // ESPN a renommé la phase de ligue en cours de route (« group-stage » →
+  // « league-phase ») : on liste les libellés de PHASE DE LIGUE connus au lieu de
+  // supposer « tout sauf group-stage ». Sinon les 156 matchs basculaient en phase
+  // finale → classements à zéro et scores absents des cartes de groupe.
+  const LEAGUE_SLUGS = { 'group-stage': 1, 'league-phase': 1, 'group-phase': 1, 'regular-season': 1, 'league-stage': 1 };
+  const isKo = (e) => { const sl = e && e.season && e.season.slug; return !!sl && !LEAGUE_SLUGS[sl]; };
   const KO_PHASE = { 'quarterfinals': 'phase_qf', 'semifinals': 'phase_sf', '3rd-place-match': 'phase_3p', 'final': 'phase_final' };
 
   function ldnDayBlocks(evList) {
@@ -1229,8 +1234,12 @@ function formatPlanningDate(frStr) {
           && (e.date || '') >= LDN_START)
         .sort((a, b) => new Date(a.date) - new Date(b.date));
       LDN_KO = LDN_EVS.filter(isKo);
-      // le classement des groupes ne compte QUE la phase de ligue (jamais les KO)
-      LDN_STAND = D.standings(LDN_EVS.filter(e => !isKo(e)));
+      // le classement des groupes ne compte QUE la phase de ligue (jamais les KO).
+      // Filet de sécurité : si ESPN renomme encore la phase de ligue, on repart de
+      // tous les matchs — standings() n'additionne de toute façon que les duels
+      // entre équipes d'un même groupe.
+      const lp = LDN_EVS.filter(e => !isKo(e));
+      LDN_STAND = D.standings(lp.length ? lp : LDN_EVS);
       renderLdnGroupCards(LDN_STAND);
       renderLdnCalendar();
       renderLdnKo();
