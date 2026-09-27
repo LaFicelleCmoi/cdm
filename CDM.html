@@ -28,7 +28,8 @@
 <script src="competition.js?v=3"></script>
 <script src="i18n.js?v=36"></script>
 <script src="events.js?v=4"></script>
-<script src="match-sheet.js?v=1"></script>
+<script src="match-sheet.js?v=2"></script>
+<script src="pip.js?v=1"></script>
 <script src="fifa-ranking.js?v=3"></script>
 <style>
 :root {
@@ -214,6 +215,12 @@ html[data-comp="ldn"] .nav-tab[data-comp="wc"] { display: none !important; }
 .ldn-cal-card { cursor: default; }
 /* éléments ouvrant la feuille de match ESPN (fil, stats, compos…) */
 .is-sheet { cursor: pointer; }
+.lw-pip { position: absolute; top: 8px; right: 8px; z-index: 2; width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 1px solid rgba(255,255,255,0.14); background: rgba(0,0,0,0.4); color: #fff; font-size: 0.7em; line-height: 1;
+  opacity: 0; transition: opacity 0.18s, background 0.18s; }
+.live-widget:hover .lw-pip, .lw-pip:focus-visible { opacity: 1; }
+.lw-pip:hover { background: rgba(245,197,24,0.28); border-color: rgba(245,197,24,0.55); }
+@media (hover: none) { .lw-pip { opacity: 0.85; } }
 .poule-match-card.is-sheet:hover { border-color: rgba(245,197,24,0.5); }
 .match-row.is-sheet:hover .mt-left, .match-row.is-sheet:hover .mt-right { color: var(--gold); }
 .live-widget.is-sheet:hover { border-color: rgba(245,197,24,0.55); }
@@ -1260,6 +1267,12 @@ function formatPlanningDate(frStr) {
 /* === Feuille de match ESPN : clic sur un match (widget live, calendrier,
    phase finale, lignes de match des groupes) → fil, stats, compos… === */
 document.addEventListener('click', (e) => {
+  const pip = e.target.closest('[data-pip]');
+  if (pip) {                                   // 📺 épingle le match en PIP
+    e.stopPropagation();
+    if (window.MatchPiP) MatchPiP.open(pip.dataset.pip);
+    return;
+  }
   const t = e.target.closest('.is-sheet[data-ev]');
   if (t && window.MatchSheet) MatchSheet.open(t.dataset.ev);
 });
@@ -2983,7 +2996,11 @@ document.addEventListener('langchange', renderScorers);
     el.dataset.evId = ev.id; // tague le match affiché (garde anti-course du feed)
     el.dataset.ev = ev.id;
     el.title = window.t('sheet_open');
+    const pipBtn = (window.MatchPiP && MatchPiP.supported())
+      ? `<button class="lw-pip" type="button" data-pip="${esc(ev.id)}" title="${esc(window.t('pip_pin'))}" aria-label="${esc(window.t('pip_pin'))}">📺</button>`
+      : '';
     el.innerHTML = `
+      ${pipBtn}
       <div class="lw-top">
         ${badge}
         ${clockHTML}
