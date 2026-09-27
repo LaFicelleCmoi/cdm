@@ -45,7 +45,7 @@
       timeline: 'Fil du match', stats: 'Statistiques', lineups: 'Compositions',
       commentary: 'Commentaire minute par minute', recap: 'Résumé', espn: 'Voir sur ESPN',
       starters: 'Titulaires', bench: 'Remplaçants', formation: 'Formation',
-      pens: 't.a.b.', show: 'Afficher', hide: 'Masquer', close: 'Fermer',
+      pens: 't.a.b.', show: 'Afficher', hide: 'Masquer', close: 'Fermer', pip: 'Épingler en PIP',
       assist: 'passe', spectators: 'spectateurs',
       ev_goal: 'But', ev_own: 'But contre son camp', ev_pen: 'Penalty', ev_penmiss: 'Penalty manqué',
       ev_yellow: 'Carton jaune', ev_red: 'Carton rouge', ev_sub: 'Remplacement',
@@ -78,7 +78,7 @@
       timeline: 'Match timeline', stats: 'Statistics', lineups: 'Line-ups',
       commentary: 'Minute-by-minute commentary', recap: 'Recap', espn: 'View on ESPN',
       starters: 'Starting XI', bench: 'Substitutes', formation: 'Formation',
-      pens: 'pens', show: 'Show', hide: 'Hide', close: 'Close',
+      pens: 'pens', show: 'Show', hide: 'Hide', close: 'Close', pip: 'Pin to PiP',
       assist: 'assist', spectators: 'spectators',
       ev_goal: 'Goal', ev_own: 'Own goal', ev_pen: 'Penalty', ev_penmiss: 'Penalty missed',
       ev_yellow: 'Yellow card', ev_red: 'Red card', ev_sub: 'Substitution',
@@ -384,9 +384,19 @@
     injectCSS();
     _host = document.createElement('div');
     _host.className = 'msh-backdrop';
-    _host.innerHTML = '<div class="msh-modal" role="dialog" aria-modal="true"><button class="msh-close" type="button" aria-label="'
+    var pip = (window.MatchPiP && window.MatchPiP.supported())
+      ? '<button class="msh-pip" type="button" title="' + esc(T('pip')) + '">📺 <span>' + esc(T('pip')) + '</span></button>'
+      : '';
+    _host.innerHTML = '<div class="msh-modal" role="dialog" aria-modal="true">' + pip + '<button class="msh-close" type="button" aria-label="'
       + esc(T('close')) + '">✕</button><div class="msh-body"></div></div>';
-    _host.addEventListener('click', function (e) { if (e.target === _host || e.target.closest('.msh-close')) close(); });
+    _host.addEventListener('click', function (e) {
+      // épingle le match affiché dans une mini-fenêtre toujours au-dessus
+      if (e.target.closest('.msh-pip')) {
+        if (_open && window.MatchPiP) window.MatchPiP.open(_open.id, _open.opts);
+        return;
+      }
+      if (e.target === _host || e.target.closest('.msh-close')) close();
+    });
     document.body.appendChild(_host);
     document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && _host && _host.classList.contains('open')) close(); });
     return _host;
@@ -441,6 +451,11 @@
       '.msh-close { position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 50%; cursor: pointer;',
       '  border: 1px solid rgba(255,255,255,0.15); background: rgba(255,255,255,0.07); color: #fff; font-size: 0.9em; z-index: 2; }',
       '.msh-close:hover { background: rgba(255,255,255,0.15); }',
+      '.msh-pip { position: absolute; top: 10px; right: 54px; height: 34px; padding: 0 12px; border-radius: 18px; cursor: pointer; z-index: 2;',
+      '  border: 1px solid rgba(251,197,49,0.35); background: rgba(251,197,49,0.12); color: var(--gold, #fbc531);',
+      '  font-family: inherit; font-size: 0.72em; font-weight: 800; letter-spacing: 0.04em; display: inline-flex; align-items: center; gap: 6px; }',
+      '.msh-pip:hover { background: rgba(251,197,49,0.22); }',
+      '@media (max-width: 620px) { .msh-pip span { display: none; } .msh-pip { padding: 0 10px; } }',
       '.msh-body { padding: 20px 22px 24px; }',
       '.msh-loading, .msh-empty { text-align: center; color: var(--muted, #8fa3b5); padding: 40px 10px; font-size: 0.92em; }',
       /* en-tête */
