@@ -140,21 +140,6 @@
 /* ============================================================
    Overlay OBS — scores en direct Coupe du Monde 2026
    Source ESPN (non officielle). Autonome, fond transparent.
-
-   À utiliser dans OBS → Source "Navigateur" (Browser Source) :
-   - URL : .../overlay.html
-   - Largeur ~480, Hauteur ~120, fond transparent (par défaut)
-
-   Options via l'URL :
-   - ?pos=top-left | top-right | bottom-left | bottom-right   (défaut top-left)
-   - ?team=France        → épingle le match d'une équipe précise
-   - ?scale=1.3          → agrandit / réduit l'overlay
-   - ?hideEmpty=1        → cache tout s'il n'y a aucun match
-   - ?comp=wc | ldn      → force la compétition (CDM / Ligue des Nations),
-                           sinon suit le toggle du site puis l'auto par date
-   Exemples :
-     overlay.html?team=France&pos=top-right
-     overlay.html?scale=1.4&pos=bottom-left
    ============================================================ */
 (function () {
   const WC_LIVE_END = Date.UTC(2026, 6, 20);
@@ -365,7 +350,8 @@
     fill('away', away);
   }
 
-  const FEED_TTL = 60000;  
+  // CHANGEMENT ICI : Durée de visibilité portée à 12 heures (pour que ça reste tout le match)
+  const FEED_TTL = 43200000;  
   const _feedSeen = {};    
   let _feedCur = null;     
   function recentEvents(evId, list) {
@@ -377,7 +363,6 @@
     });
   }
   
-  // Alignement dynamique des événements sous la bonne équipe (Domicile à gauche, Extérieur à droite)
   function feedRowsHTML(ev, items) {
     const cs = ev.competitions[0].competitors || [];
     const home = cs.find(c => c.homeAway === 'home') || cs[0];
@@ -480,7 +465,10 @@
   setInterval(() => {
     const nowMs = Date.now();
     for (const id in evCache) { if (evCache[id] && nowMs - evCache[id].ts > 600000) delete evCache[id]; }
-    for (const k in _feedSeen) { if (nowMs - _feedSeen[k] > 600000) delete _feedSeen[k]; }
+    
+    // CHANGEMENT ICI AUSSI : Mise à jour du délai pour le nettoyage mémoire (43200000 ms = 12h)
+    for (const k in _feedSeen) { if (nowMs - _feedSeen[k] > 43200000) delete _feedSeen[k]; }
+    
     if (!_feedCur) return;
     const f = bug.querySelector('.sb-feed');
     if (!f || !f.classList.contains('list')) return; 
