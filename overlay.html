@@ -580,7 +580,6 @@
 
   function pickAndRender(events) {
     const evs = (events || []).filter(e => e && e.competitions && e.competitions[0] && e.competitions[0].status && e.competitions[0].status.type).filter(matchesTeam);
-    if (rotateTimer) { clearInterval(rotateTimer); rotateTimer = null; }
 
     const live = evs.filter(e => e.competitions[0].status.type.state === 'in');
     if (live.length) {
@@ -588,19 +587,25 @@
       liveList = live;
       render(live[rotateIdx]);
       if (live.length > 1 && !TEAM) {
-        rotateTimer = setInterval(() => { try { rotateIdx = (rotateIdx + 1) % live.length; render(live[rotateIdx]); } catch (e) {} }, ROTATE_MS);
+        if (!rotateTimer) {
+          rotateTimer = setInterval(() => { try { rotateIdx = (rotateIdx + 1) % liveList.length; render(liveList[rotateIdx]); } catch (e) {} }, ROTATE_MS);
+        }
+      } else {
+        if (rotateTimer) { clearInterval(rotateTimer); rotateTimer = null; }
       }
-      schedulePoll(REFRESH_LIVE);   // match en cours → 7 s (résultats quasi temps réel)
+      schedulePoll(REFRESH_LIVE);
       return;
     }
-    // pas de live → prochain match (ou dernier terminé si team épinglée), sinon rien
+
+    if (rotateTimer) { clearInterval(rotateTimer); rotateTimer = null; }
+
     const order = { pre: 0, post: 1 };
     const rest = evs.filter(e => e.competitions[0].status.type.state !== 'in')
       .sort((a, b) => new Date(a.date) - new Date(b.date));
     const upcoming = rest.find(e => e.competitions[0].status.type.state === 'pre');
     const lastPost = [...rest].reverse().find(e => e.competitions[0].status.type.state === 'post');
     render(upcoming || (TEAM ? lastPost : null) || null);
-    // coup d'envoi < 15 min → 10 s (attraper le 0' au plus tôt), sinon 45 s
+
     const soon = upcoming && (new Date(upcoming.date) - Date.now()) < 15 * 60000;
     schedulePoll(soon ? REFRESH_SOON : REFRESH_IDLE);
   }
