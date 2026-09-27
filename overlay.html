@@ -71,37 +71,47 @@
 
   /* Liste des événements (buteurs / cartons / penalty) sous le scorebug */
   .sb-feed {
-    display: inline-flex; flex-direction: column; align-items: flex-start; gap: 4px;
+    display: flex; flex-direction: column; align-items: stretch; gap: 4px;
     background: var(--bg); border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 8px; padding: 7px 12px; max-width: 100%;
+    border-radius: 8px; padding: 7px 12px; width: 100%; box-sizing: border-box;
     opacity: 0; transform: translateY(-6px); transition: opacity .3s, transform .3s;
     font-size: 14px; font-weight: 700; color: var(--white);
+    align-self: stretch; /* Prend la même largeur que le scorebug */
   }
   .sb-feed.show { opacity: 1; transform: translateY(0); }
   .sb-feed.flash { animation: feedflash 1.2s ease; }
   @keyframes feedflash { 0%,100%{ box-shadow:0 0 0 0 rgba(251,197,49,0) } 30%{ box-shadow:0 0 0 3px var(--gold) } }
-  .fe-row { display: inline-flex; align-items: center; gap: 7px; white-space: nowrap; }
+  
+  /* Flexbox pour orienter les événements sous la bonne équipe */
+  .fe-row { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .fe-row.home-side { flex-direction: row; }
+  .fe-row.away-side { flex-direction: row-reverse; } /* Aligné à droite pour l'équipe extérieure */
+  
   .sb-feed .fe-emoji { font-size: 16px; }
-  .sb-feed .fe-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 34px; }
+  .sb-feed .fe-clock { color: var(--gold); font-weight: 800; font-variant-numeric: tabular-nums; min-width: 34px; text-align: center; }
   .fe-row.red .fe-clock { color: var(--red); }
   .sb-feed.cooling { border-color: rgba(56,189,248,0.45); }
   .sb-feed.cooling .fe-player { color: #7fdbff; }
-  .sb-feed .fe-team { color: #cdd9e6; font-weight: 800; letter-spacing: .02em; }
   .sb-feed .fe-player { color: #fff; }
   .sb-feed .fe-tag { font-size: 11px; font-weight: 800; color: rgba(255,255,255,0.55); text-transform: uppercase; letter-spacing: .04em; }
+  
   /* Séance de tirs au but */
   .sb-feed.shootout { align-items: stretch; gap: 6px; }
   .so-tracker { display: flex; flex-direction: column; gap: 5px; }
   .so-row { display: flex; align-items: center; gap: 7px; white-space: nowrap; }
+  .so-row.home-side { flex-direction: row; }
+  .so-row.away-side { flex-direction: row-reverse; }
   .so-flag { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; flex-shrink: 0; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
-  .so-abbr { font-weight: 800; min-width: 36px; letter-spacing: .03em; color: var(--white); }
+  .so-abbr { font-weight: 800; min-width: 36px; letter-spacing: .03em; color: var(--white); text-align: center; }
   .so-score { font-weight: 800; min-width: 16px; text-align: center; color: var(--gold); font-variant-numeric: tabular-nums; }
   .so-cells { display: inline-flex; gap: 3px; margin-left: 3px; }
+  .so-row.away-side .so-cells { margin-left: 0; margin-right: 3px; }
   .so-cell { width: 17px; height: 17px; border-radius: 3px; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; line-height: 1; }
   .so-cell.scored { background: #1f9d57; color: #fff; }
   .so-cell.missed { background: var(--red); color: #fff; }
   .so-cell.pending { background: rgba(255,255,255,0.12); color: rgba(255,255,255,0.5); }
   .so-row.win .so-abbr, .so-row.win .so-score { color: #34d36b; }
+  
   /* Célébration de but « BUT ! » */
   #goal-cele-layer { position: fixed; inset: 0; z-index: 9500; pointer-events: none; display: flex; align-items: flex-start; justify-content: center; overflow: hidden; }
   .gc-card { --tc: #fbc531; margin-top: 14vh; min-width: 250px; max-width: 92vw; padding: 18px 32px 20px; border-radius: 22px; text-align: center; background: linear-gradient(180deg, rgba(14,20,28,0.97), rgba(8,12,18,0.99)); border: 2px solid var(--tc); box-shadow: 0 24px 64px rgba(0,0,0,0.6), 0 0 50px -8px var(--tc), inset 0 0 46px -24px var(--tc); opacity: 0; transform: translateY(-26px) scale(0.82); }
@@ -147,8 +157,6 @@
      overlay.html?scale=1.4&pos=bottom-left
    ============================================================ */
 (function () {
-  // Après la finale CDM (19/07/2026), l'overlay bascule sur la Ligue des Nations 2026-27.
-  // competition.js gère ?comp=wc|ldn + le choix du toggle du site (localStorage).
   const WC_LIVE_END = Date.UTC(2026, 6, 20);
   const ACTIVE_SLUG = (window.COMP && window.COMP.slug) || (Date.now() >= WC_LIVE_END ? 'uefa.nations' : 'fifa.world');
   const ENDPOINT = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/scoreboard`;
@@ -157,24 +165,23 @@
   const TEAM = (P.get('team') || '').trim().toLowerCase();
   const SCALE = Math.min(3, Math.max(0.5, parseFloat(P.get('scale')) || 1));
   const HIDE_EMPTY = P.get('hideEmpty') === '1';
-  // Poll ADAPTATIF : 7 s pendant un match en direct (les résultats tombent vite),
-  // 10 s quand un coup d'envoi approche (<15 min), 45 s au repos.
+  
   const REFRESH_LIVE = 7000, REFRESH_SOON = 10000, REFRESH_IDLE = 45000;
-  const ROTATE_MS = 10000;    // rotation entre matchs en direct
+  const ROTATE_MS = 10000;
 
   const bug = document.getElementById('bug');
   bug.className = POS;
   bug.style.transform = `scale(${SCALE})`;
 
   let liveList = [], rotateIdx = 0, rotateTimer = null;
-  const lastScore = {}; // id -> "h-a"
+  const lastScore = {}; 
 
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-  const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } }; // timeout fetch sûr
+  const tmo = (ms) => { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } };
   const parisTime = (iso) => { try { return new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Paris' }); } catch (e) { return ''; } };
   const abbr = (c) => (c && c.team && (c.team.abbreviation || c.team.shortDisplayName)) || '—';
   const logo = (c) => (c && c.team && c.team.logo) || '';
-  // Met en valeur le temps additionnel : "90'+3'" -> "90'" + pastille verte "+3'"
+  
   const clockHTML = (txt) => {
     const m = String(txt == null ? '' : txt).match(/^(.*?)(\+\s*\d+'?)\s*$/);
     if (!m) return esc(txt);
@@ -189,13 +196,12 @@
     });
   };
 
-  // Logo de la compétition (FIFA World Cup) servi par ESPN — variante claire pour fond sombre
   const COMP_LOGO = 'https://a.espncdn.com/i/leaguelogos/soccer/500-dark/4.png';
 
-  /* ---- Événements du match (buteurs/cartons/penalty) — inline, autonome ---- */
+  /* ---- Événements du match (buteurs/cartons/penalty) ---- */
   const SUMMARY = `https://site.api.espn.com/apis/site/v2/sports/soccer/${ACTIVE_SLUG}/summary?event=`;
-  const evCache = {}; // id -> {ts, list}
-  const feedSig = {}; // id -> signature du dernier event affiché (flash sur nouveauté)
+  const evCache = {}; 
+  const feedSig = {}; 
   const FEED_EMOJI = { goal: '⚽', pen: '⚽', freekick: '⚽', owngoal: '⚽', penmiss: '❌', red: '🟥', yellow: '🟨' };
   const FEED_TAG = { pen: 'PEN', freekick: 'CF', owngoal: 'CSC', penmiss: 'PEN ✗' };
   function evKind(t) {
@@ -218,7 +224,6 @@
       if (!r.ok) throw 0;
       const d = await r.json();
       const ke = d.keyEvents || [];
-      // Pause fraîcheur en cours : dernier "drinks break" non suivi d'un "End Delay"
       let lastC = -1, lastE = -1;
       ke.forEach((k, i) => {
         const tp = (k.type || {}).text || '', tx = k.text || '';
@@ -237,20 +242,16 @@
     } catch (e) { return (c && c.list) || []; }
   }
 
-  // Événements depuis competitions[0].details du SCOREBOARD (réponse déjà en main) :
-  // ZÉRO requête et ZÉRO retard — l'endpoint summary, lui, traîne derrière le score.
-  // (C'est la même source que le tracker de tirs au but.)
   function listFromDetails(ev) {
     const comp = ev.competitions[0];
     const dets = comp.details || [];
-    if (!dets.length) return null;                    // pas fourni → repli summary
+    if (!dets.length) return null;
     const byId = {};
     (comp.competitors || []).forEach(c => { if (c.team) byId[c.team.id] = c.team.displayName; });
     const out = [];
     for (const d of dets) {
-      if (d.shootout) continue;                       // la séance a son tracker dédié
+      if (d.shootout) continue;
       let kind = evKind((d.type && d.type.text) || '');
-      // les drapeaux booléens du scoreboard sont plus fiables que le libellé
       if (d.ownGoal) kind = 'owngoal';
       else if (d.penaltyKick) kind = d.scoringPlay ? 'pen' : 'penmiss';
       else if (d.redCard) kind = 'red';
@@ -267,7 +268,7 @@
     return out;
   }
 
-  // === Célébration de but « BUT ! » (carte animée teintée à la nation marqueuse) ===
+  /* === Célébration de but « BUT ! » === */
   const GOAL_KINDS = ['goal', 'pen', 'freekick', 'owngoal'];
   const GoalCele = (() => {
     let layer = null, queue = [], showing = false;
@@ -302,26 +303,19 @@
     }
     return { show(g) { queue.push(g); next(); } };
   })();
-  // Prévisualisation : taper goalCeleDemo() dans la console (ou OBS → Interagir).
-  window.goalCeleDemo = (o) => GoalCele.show(Object.assign({ abbr: 'NOR', color: 'ba0c2f', logo: 'https://a.espncdn.com/i/teamlogos/countries/500/nor.png', scorer: 'Haaland', minute: "86'", homeAbbr: 'CIV', awayAbbr: 'NOR', hs: 1, as: 2 }, o || {}));
-  // Récupère le buteur + la minute via les événements du match, puis affiche la carte.
+  
   async function celebrateGoal(scorerComp, hs, as, homeAbbr, awayAbbr, ev) {
     const team = (scorerComp && scorerComp.team) || {};
     let scorer = '', minute = '';
     try {
-      // Buts de CETTE équipe uniquement (un CSC adverse compte pour nous) —
-      // jamais de repli inter-équipes : mieux vaut aucun buteur qu'un buteur adverse.
       const pick = (list) => {
         const mine = (list || []).filter(e => GOAL_KINDS.includes(e.kind) &&
           (e.kind === 'owngoal' ? e.team !== team.displayName : e.team === team.displayName));
         return mine[mine.length - 1];
       };
-      // 1) IMMÉDIAT : details du scoreboard — le score vient d'y bouger, le buteur
-      //    y est déjà (fini l'attente du summary + la relance à 4 s systématique)
       let g = pick(listFromDetails(ev) || []);
-      // 2) repli : summary forcé (cache court-circuité), avec une relance
       if (!g) g = pick(await fetchEv(ev.id, true));
-      if (!g) { await new Promise(r => setTimeout(r, 4000)); g = pick(await fetchEv(ev.id, true)); } // le summary peut retarder sur le scoreboard
+      if (!g) { await new Promise(r => setTimeout(r, 4000)); g = pick(await fetchEv(ev.id, true)); } 
       if (g) { scorer = lastName(g.player); minute = g.clock; }
     } catch (e) {}
     GoalCele.show({
@@ -329,7 +323,7 @@
       color: team.color, logo: team.logo, scorer, minute, hs, as, homeAbbr, awayAbbr
     });
   }
-  // Quel(s) côté(s) viennent de marquer (augmentation numérique du score)
+
   function goalSides(prevKey, ch, ca) {
     const p = (prevKey || '').split('-'); const ph = parseInt(p[0]), pa = parseInt(p[1]);
     const sides = [];
@@ -346,7 +340,7 @@
   function clearCards() {
     bug.querySelectorAll('.sb-cards').forEach(s => { s.innerHTML = ''; s.classList.remove('show'); });
   }
-  // Rappel cartons jaunes/rouges par équipe sous chaque équipe du scorebug
+  
   function paintCards(list, ev) {
     const cs = ev.competitions[0].competitors || [];
     const home = cs.find(c => c.homeAway === 'home') || cs[0];
@@ -371,19 +365,9 @@
     fill('away', away);
   }
 
-  // Abréviation de l'équipe d'un événement (via les compétiteurs du match)
-  function teamAbbrOf(ev, teamName) {
-    if (!teamName) return '';
-    const c = (ev.competitions[0].competitors || []).find(x => x.team && x.team.displayName === teamName);
-    return c ? (c.team.abbreviation || c.team.shortDisplayName || '') : '';
-  }
-
-  // Expiration des événements : un événement reste ~1 min sur l'overlay (à partir du
-  // moment où l'overlay le voit), puis disparaît. Le rappel cartons par équipe, lui,
-  // reste cumulatif (non concerné).
-  const FEED_TTL = 60000;   // 1 minute
-  const _feedSeen = {};     // clé événement -> 1er affichage (ms)
-  let _feedCur = null;      // { ev, list } courant, pour l'élagage entre deux fetchs
+  const FEED_TTL = 60000;  
+  const _feedSeen = {};    
+  let _feedCur = null;     
   function recentEvents(evId, list) {
     const now = Date.now();
     return (list || []).filter(it => {
@@ -392,27 +376,30 @@
       return now - _feedSeen[k] <= FEED_TTL;
     });
   }
+  
+  // Alignement dynamique des événements sous la bonne équipe (Domicile à gauche, Extérieur à droite)
   function feedRowsHTML(ev, items) {
+    const cs = ev.competitions[0].competitors || [];
+    const home = cs.find(c => c.homeAway === 'home') || cs[0];
+    
     return items.slice().reverse().map(it => {
-      const ab = teamAbbrOf(ev, it.team);
-      const teamTag = ab ? `<span class="fe-team">${esc(ab)}</span>` : '';
+      const isHome = (it.team === home.team.displayName);
+      const sideClass = isHome ? 'home-side' : 'away-side';
       const tg = FEED_TAG[it.kind] ? `<span class="fe-tag">${FEED_TAG[it.kind]}</span>` : '';
-      return `<div class="fe-row${it.kind === 'red' ? ' red' : ''}"><span class="fe-emoji">${FEED_EMOJI[it.kind]}</span><span class="fe-clock">${esc(it.clock)}</span>${teamTag}<span class="fe-player">${esc(lastName(it.player))}</span>${tg}</div>`;
+      
+      return `<div class="fe-row ${sideClass}${it.kind === 'red' ? ' red' : ''}"><span class="fe-emoji">${FEED_EMOJI[it.kind]}</span><span class="fe-clock">${esc(it.clock)}</span><span class="fe-player">${esc(lastName(it.player))}</span>${tg}</div>`;
     }).join('');
   }
 
-  // === Tirs au but : ESPN expose chaque tir dans competitions[0].details (shootout:true,
-  // scoringPlay = marqué/raté, team + tireur), dans l'ordre alterné. On reconstruit par équipe. ===
+  /* === Tirs au but === */
   function shootoutData(ev) {
     const comp = ev.competitions[0];
     const cs = comp.competitors || [];
-    if (!cs.some(c => c.shootoutScore != null)) return null; // pas de séance
+    if (!cs.some(c => c.shootoutScore != null)) return null; 
     const home = cs.find(c => c.homeAway === 'home') || cs[0];
     const away = cs.find(c => c.homeAway === 'away') || cs[1];
     const homeId = home.team.id, awayId = away.team.id;
     const seq = {}; seq[homeId] = []; seq[awayId] = [];
-    // ESPN ne liste QUE les tirs marqués → on reconstitue les ratés via les « trous »
-    // dans l'alternance (un tir omis = raté). Gère aussi les ratés explicites.
     const dets = (comp.details || [])
       .filter(d => d && d.shootout && d.team && (d.team.id === homeId || d.team.id === awayId))
       .map(d => ({ team: d.team.id, scored: !!d.scoringPlay && !/miss|saved|fail/i.test((d.type && d.type.text) || '') }));
@@ -422,12 +409,9 @@
       while (di < dets.length && guard++ < 40) {
         const expected = order[kn % 2];
         if (dets[di].team === expected) { seq[expected].push(dets[di].scored); di++; }
-        else seq[expected].push(false); // tir omis par ESPN = raté
+        else seq[expected].push(false); 
         kn++;
       }
-      // Raté DÉCISIF (dernier tir de la séance, omis par ESPN : aucun tir suivant
-      // ne crée de « trou ») : si la séance est finie et que l'alternance attendait
-      // le perdant, matérialise sa ✗ finale.
       const winId = home.winner === true ? homeId : away.winner === true ? awayId : null;
       if (winId) {
         const loseId = winId === homeId ? awayId : homeId;
@@ -437,7 +421,8 @@
     const mk = (c) => ({ abbr: abbr(c), logo: logo(c), so: (c.shootoutScore != null ? c.shootoutScore : 0), kicks: seq[c.team.id] || [], winner: c.winner === true });
     return { home: mk(home), away: mk(away) };
   }
-  function soRow(t, slots) {
+  
+  function soRow(t, slots, isAway) {
     let cells = '';
     for (let i = 0; i < slots; i++) {
       cells += i < t.kicks.length
@@ -445,45 +430,43 @@
         : `<span class="so-cell pending">${i + 1}</span>`;
     }
     const flag = t.logo ? `<img class="so-flag" src="${t.logo}" alt="">` : '<span class="so-flag"></span>';
-    return `<div class="so-row${t.winner ? ' win' : ''}">${flag}<span class="so-abbr">${esc(t.abbr)}</span><span class="so-score">${esc(t.so)}</span><span class="so-cells">${cells}</span></div>`;
+    return `<div class="so-row${t.winner ? ' win' : ''}${isAway ? ' away-side' : ' home-side'}">${flag}<span class="so-abbr">${esc(t.abbr)}</span><span class="so-score">${esc(t.so)}</span><span class="so-cells">${cells}</span></div>`;
   }
+  
   function renderShootout(so) {
-    const slots = Math.max(5, so.home.kicks.length, so.away.kicks.length); // 5 + mort subite
+    const slots = Math.max(5, so.home.kicks.length, so.away.kicks.length); 
     const el = feedEl();
     el.className = 'sb-feed show shootout';
-    el.innerHTML = `<div class="so-tracker">${soRow(so.home, slots)}${soRow(so.away, slots)}</div>`;
+    el.innerHTML = `<div class="so-tracker">${soRow(so.home, slots, false)}${soRow(so.away, slots, true)}</div>`;
   }
 
-  // Affiche les événements notables récents (< 1 min) sous le score + l'équipe du joueur
   async function updateFeed(ev) {
     const f = bug.querySelector('.sb-feed');
     const state = ev && ev.competitions[0].status.type.state;
     if (!ev || state === 'pre') { if (f) f.classList.remove('show'); clearCards(); _feedCur = null; return; }
-    // 1) source IMMÉDIATE : details du scoreboard déjà en main (aucun retard) ;
-    // 2) summary en ARRIÈRE-PLAN (pause fraîcheur + repli si details absent) —
-    //    il ne bloque plus jamais l'affichage des résultats.
+    
     let list = listFromDetails(ev);
     const bg = fetchEv(ev.id);
     if (!list) list = await bg;
-    // Rotation multi-matchs : si le scorebug a changé de match pendant l'await,
-    // ne pas peindre les événements/cartons du match A sous le scorebug du match B.
     const curCard = bug.querySelector('.scorebug');
     if (curCard && curCard.dataset.id !== String(ev.id)) return;
-    paintCards(list, ev); // rappel cartons par équipe (liste complète, cumulatif)
-    // Séance de tirs au but en cours/terminée → tracker dédié (prioritaire)
+    paintCards(list, ev); 
+    
     const so = shootoutData(ev);
     if (so) { renderShootout(so); _feedCur = null; return; }
-    // Pause fraîcheur en cours → encart spécial prioritaire
+    
     if ((evCache[ev.id] || {}).cooling) {
       const el = feedEl();
       el.className = 'sb-feed show cooling';
-      el.innerHTML = `<div class="fe-row"><span class="fe-emoji">💧</span><span class="fe-player">Pause fraîcheur</span></div>`;
+      el.innerHTML = `<div class="fe-row" style="justify-content: center; width: 100%;"><span class="fe-emoji">💧</span><span class="fe-player">Pause fraîcheur</span></div>`;
       _feedCur = null;
       return;
     }
+    
     _feedCur = { ev, list };
-    const recent = recentEvents(ev.id, list); // ne garde que ce qui a < 1 min
+    const recent = recentEvents(ev.id, list); 
     if (!recent.length) { if (f) f.classList.remove('show'); return; }
+    
     const el = feedEl();
     const newest = list[list.length - 1];
     const sig = `${newest.kind}|${newest.clock}|${newest.player}`;
@@ -494,15 +477,13 @@
     feedSig[ev.id] = sig;
   }
 
-  // Élagage régulier : retire les événements de plus d'1 min même sans nouveau fetch.
   setInterval(() => {
-    // purge le cache summary des matchs plus affichés (overlay OBS allumé des heures)
     const nowMs = Date.now();
     for (const id in evCache) { if (evCache[id] && nowMs - evCache[id].ts > 600000) delete evCache[id]; }
-    for (const k in _feedSeen) { if (nowMs - _feedSeen[k] > 600000) delete _feedSeen[k]; } // l'overlay tourne des heures
+    for (const k in _feedSeen) { if (nowMs - _feedSeen[k] > 600000) delete _feedSeen[k]; }
     if (!_feedCur) return;
     const f = bug.querySelector('.sb-feed');
-    if (!f || !f.classList.contains('list')) return; // épargne l'encart « pause fraîcheur »
+    if (!f || !f.classList.contains('list')) return; 
     const recent = recentEvents(_feedCur.ev.id, _feedCur.list);
     if (!recent.length) { f.classList.remove('show'); _feedCur = null; return; }
     f.innerHTML = feedRowsHTML(_feedCur.ev, recent);
@@ -512,14 +493,13 @@
     if (!ev) { bug.querySelector('.scorebug')?.classList.remove('show'); bug.querySelector('.sb-feed')?.classList.remove('show'); if (HIDE_EMPTY) bug.innerHTML = ''; return; }
     const comp = ev.competitions[0];
     const t = comp.status.type;
-    const state = t.state; // pre | in | post
+    const state = t.state; 
     const cs = comp.competitors || [];
     const home = cs.find(c => c.homeAway === 'home') || cs[0];
     const away = cs.find(c => c.homeAway === 'away') || cs[1];
     const hs = state === 'pre' ? '–' : (home && home.score !== undefined ? home.score : '–');
     const as = state === 'pre' ? '–' : (away && away.score !== undefined ? away.score : '–');
 
-    // Match interrompu : ESPN garde state="in" mais name=STATUS_DELAYED/SUSPENDED/ABANDONED
     const interrupted = state === 'in' && /delay|suspend|abandon|interrupt|postpon/i.test((t.name || '') + ' ' + (t.description || ''));
     const statusTxt = interrupted ? '⏸ Interrompu'
                     : state === 'in' ? (comp.status.displayClock || t.shortDetail || 'LIVE')
@@ -531,7 +511,6 @@
     const fresh = !card || card.dataset.id !== ev.id;
     if (fresh) {
       if (card) card.remove();
-      // masque le feed de l'ancien match (le temps que celui du nouveau charge)
       const staleFeed = bug.querySelector('.sb-feed');
       if (staleFeed) staleFeed.classList.remove('show');
       card = document.createElement('div');
@@ -550,32 +529,29 @@
             ${logo(away) ? `<img class="sb-logo" src="${logo(away)}" alt="">` : ''}
             <span class="sb-tcol"><span class="sb-abbr">${esc(abbr(away))}</span><span class="sb-cards" data-side="away"></span></span>
           </div>`;
-      bug.insertBefore(card, bug.firstChild); // scorebug en premier (le feed reste sous, ou au-dessus en bas via CSS)
+      bug.insertBefore(card, bug.firstChild); 
       requestAnimationFrame(() => card.classList.add('show'));
     } else {
-      // mise à jour en place (pas de re-création → pas de clignotement)
       card.className = `scorebug show state-${state}${interrupted ? ' delayed' : ''}`;
       card.querySelector('[data-s="h"]').textContent = hs;
       card.querySelector('[data-s="a"]').textContent = as;
       const st = card.querySelector('.sb-status');
       st.className = `sb-status ${statusCls}`;
-      st.innerHTML = clockHTML(statusTxt); // clockHTML échappe + colore le temps additionnel
+      st.innerHTML = clockHTML(statusTxt); 
     }
 
-    // détection de but → flash + bump, SEULEMENT si un score augmente
-    // (pas au coup d'envoi « –-– » → « 0-0 », ni sur but annulé par la VAR)
     const key = `${hs}-${as}`;
     if (state === 'in' && lastScore[ev.id] && lastScore[ev.id] !== key) {
       const sides = goalSides(lastScore[ev.id], hs, as);
       if (sides.length) {
         card.classList.remove('goal'); void card.offsetWidth; card.classList.add('goal');
         card.querySelectorAll('.v').forEach(v => { v.classList.remove('bump'); void v.offsetWidth; v.classList.add('bump'); });
-        sides.forEach(side => celebrateGoal(side === 'home' ? home : away, hs, as, abbr(home), abbr(away), ev)); // carte « BUT ! »
+        sides.forEach(side => celebrateGoal(side === 'home' ? home : away, hs, as, abbr(home), abbr(away), ev)); 
       }
     }
     lastScore[ev.id] = key;
 
-    updateFeed(ev); // buteurs / cartons / penalty sous le score
+    updateFeed(ev); 
   }
 
   function pickAndRender(events) {
@@ -619,7 +595,6 @@
     } catch (e) { /* garde le dernier affichage */ }
   }
 
-  // planification adaptative (remplace l'intervalle fixe de 15 s)
   let pollTimer = null, pollMs = 0;
   function schedulePoll(ms) {
     if (ms === pollMs) return;
@@ -627,11 +602,10 @@
     if (pollTimer) clearInterval(pollTimer);
     pollTimer = setInterval(tick, ms);
   }
-  // onglet/scène qui redevient visible → resynchronise tout de suite
   document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
 
   tick();
-  schedulePoll(REFRESH_IDLE); // ajusté dès la 1re réponse (live → 7 s)
+  schedulePoll(REFRESH_IDLE); 
 })();
 </script>
 </body>
