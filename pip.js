@@ -33,9 +33,11 @@
   var tmo = function (ms) { try { return AbortSignal.timeout(ms); } catch (e) { return undefined; } };
 
   var L = {
-    fr: { pin: 'Épingler en PIP', kickoff: 'Coup d’envoi', live: 'EN DIRECT', ft: 'Terminé',
+    fr: { og: '(csc)', pen: '(pen.)',
+          pin: 'Épingler en PIP', kickoff: 'Coup d’envoi', live: 'EN DIRECT', ft: 'Terminé',
           ht: 'Mi-temps', pens: 't.a.b.', soon: 'À venir', none: 'Match introuvable', vs: 'VS' },
-    en: { pin: 'Pin to PiP', kickoff: 'Kick-off', live: 'LIVE', ft: 'Full time',
+    en: { og: '(og)', pen: '(pen.)',
+          pin: 'Pin to PiP', kickoff: 'Kick-off', live: 'LIVE', ft: 'Full time',
           ht: 'Half-time', pens: 'pens', soon: 'Upcoming', none: 'Match not found', vs: 'VS' }
   };
   var T = function (k) { return L[lang()][k] || L.fr[k] || k; };
@@ -79,18 +81,45 @@
     var clock = state === 'in' ? (st.displayClock || ty.shortDetail || '')
       : state === 'post' ? (ty.detail || T('ft'))
         : kickoffTxt(c.date);
-    // buteurs (fil du match) : les 3 derniers buts, pour garder la fenêtre lisible
-    var goals = (d.keyEvents || []).filter(function (e) {
-      var t = ((e.type && e.type.type) || '') + ' ' + ((e.type && e.type.text) || '');
-      return /goal/i.test(t) && !/own/i.test(t) || /penalty - scored/i.test(t);
-    }).slice(-3).map(function (e) {
-      var who = ((e.participants || [])[0] || {}).athlete;
-      return ((e.clock && e.clock.displayValue) || '') + ' ' + ((who && who.displayName) || '').split(' ').slice(-1)[0];
-    });
+    var sc = scorers(d, String(h.team.id));
     return {
       home: side(h), away: side(a), state: state, clock: clock,
-      phase: c.altGameNote || '', date: c.date, goals: goals
+      phase: c.altGameNote || '', date: c.date,
+      goalsHome: sc.home, goalsAway: sc.away
     };
+  }
+
+  /* Buteurs RANGÉS : chronologiquement (période puis horloge — l'ordre brut
+     d'ESPN n'est pas garanti), puis répartis dans le camp qui a marqué.
+     Un csc est crédité à l'équipe qui en profite (ESPN pose déjà `team` sur le
+     bénéficiaire) et signalé comme tel ; les tirs au but sont exclus. */
+  function scorers(d, homeId) {
+    var evs = (d.keyEvents || []).map(function (e, i) { return { e: e, i: i }; })
+      .filter(function (x) {
+        var e = x.e;
+        if (e.shootout) return false;
+        var t = ((e.type && e.type.type) || '') + ' ' + ((e.type && e.type.text) || '');
+        if (/miss|saved|fail/i.test(t)) return false;          // penalty manqué
+        return /goal/i.test(t) || /penalty - scored/i.test(t);
+      })
+      .sort(function (a, b) {
+        var pa = (a.e.period && a.e.period.number) || 0, pb = (b.e.period && b.e.period.number) || 0;
+        if (pa !== pb) return pa - pb;
+        var ca = (a.e.clock && a.e.clock.value) || 0, cb = (b.e.clock && b.e.clock.value) || 0;
+        if (ca !== cb) return ca - cb;
+        return a.i - b.i;                                       // égalité : ordre ESPN
+      });
+    var home = [], away = [];
+    evs.forEach(function (x) {
+      var e = x.e;
+      var t = ((e.type && e.type.type) || '') + ' ' + ((e.type && e.type.text) || '');
+      var who = ((e.participants || [])[0] || {}).athlete;
+      var name = ((who && who.displayName) || '').split(' ').slice(-1)[0];
+      var tag = /own/i.test(t) ? ' ' + T('og') : (/penalty/i.test(t) ? ' ' + T('pen') : '');
+      var item = ((e.clock && e.clock.displayValue) || '') + ' ' + name + tag;
+      (String(e.team && e.team.id) === homeId ? home : away).push(item);
+    });
+    return { home: home, away: away };
   }
   function kickoffTxt(iso) {
     try {
@@ -117,7 +146,11 @@
     '.p-status{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8a9bb0;text-align:center;',
     '  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.p-status.live{color:#ff4757}',
-    '.p-goals{font-size:10px;color:#9fb0c2;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.p-goals{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:start;font-size:10px;color:#9fb0c2}',
+    '.p-gcol{display:flex;flex-direction:column;gap:2px;min-width:0}',
+    '.p-gcol span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.p-gcol.a{text-align:right}',
+    '.p-gball{opacity:.75}',
     '@media (max-width:260px){.p-name{font-size:12px}.p-score{font-size:24px}.p-flag{width:26px;height:18px}}'
   ].join('');
 
@@ -138,7 +171,16 @@
       + '</div>' + so
       + '<div class="p-status' + (m.state === 'in' ? ' live' : '') + '">'
       + (m.state === 'in' ? '🔴 ' : '') + esc(m.clock || '') + '</div>'
-      + (m.goals && m.goals.length ? '<div class="p-goals">⚽ ' + esc(m.goals.join(' · ')) + '</div>' : '');
+      + goalsHtml(m);
+  }
+
+  // les buteurs restent RANGÉS sous leur équipe : colonne gauche = domicile
+  function goalsHtml(m) {
+    if (!(m.goalsHome.length || m.goalsAway.length)) return '';
+    var col = function (list, cls) {
+      return '<div class="p-gcol ' + cls + '">' + list.map(function (g) { return '<span>' + esc(g) + '</span>'; }).join('') + '</div>';
+    };
+    return '<div class="p-goals">' + col(m.goalsHome, 'h') + '<span class="p-gball">⚽</span>' + col(m.goalsAway, 'a') + '</div>';
   }
 
   function openDocPip(m) {
@@ -171,12 +213,15 @@
     ctx.fillText(m.home.abbr + '   ' + (m.state === 'pre' ? T('vs') : (m.home.score + ' – ' + m.away.score)) + '   ' + m.away.abbr, W / 2, H / 2);
     ctx.fillStyle = m.state === 'in' ? '#ff4757' : '#8a9bb0';
     ctx.font = '600 22px system-ui, sans-serif';
-    ctx.fillText((m.state === 'in' ? '● ' : '') + (m.clock || ''), W / 2, H - 58);
-    if (m.goals && m.goals.length) {
-      ctx.fillStyle = '#9fb0c2';
-      ctx.font = '500 18px system-ui, sans-serif';
-      ctx.fillText(m.goals.join(' · ').slice(0, 60), W / 2, H - 26);
-    }
+    ctx.fillText((m.state === 'in' ? '● ' : '') + (m.clock || ''), W / 2, H - 92);
+    // buteurs rangés par camp : domicile à gauche, extérieur à droite
+    ctx.fillStyle = '#9fb0c2';
+    ctx.font = '500 17px system-ui, sans-serif';
+    ctx.textAlign = 'left';
+    m.goalsHome.slice(-3).forEach(function (g, i) { ctx.fillText(g, 22, H - 62 + i * 20); });
+    ctx.textAlign = 'right';
+    m.goalsAway.slice(-3).forEach(function (g, i) { ctx.fillText(g, W - 22, H - 62 + i * 20); });
+    ctx.textAlign = 'center';
   }
 
   function openVideoPip(m) {
