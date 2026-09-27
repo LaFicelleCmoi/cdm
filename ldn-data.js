@@ -6,8 +6,11 @@
      groupOf(fr)      -> { lg, num, teams } | null,
      frName(en)       -> nom FR (via TEAM_FR, sinon le nom ESPN),
      standings(events)-> [{ lg, num, played,
-                            rows    : [{fr,p,w,d,l,gf,ga,gd,pts,form:['W','D',…]}],
+                            rows    : [{fr,p,w,d,l,gf,ga,gd,pts,form:['W','D',…],
+                                        live:bool, next:{opp,date,home}|null}],
                             matches : [{id,t1,t2,s1,s2,state,date}] }]
+   Classement DYNAMIQUE : les matchs EN COURS comptent avec leur score du
+   moment (la ligne est marquée live:true), comme un classement en direct.
    }
    Règles phase de ligue : 3/1/0 pts, nuls autorisés (pas de t.a.b.),
    matchs terminés uniquement, tri Pts › différence › BM › alphabétique
@@ -48,7 +51,7 @@
     var T = {}, M = {};
     GROUPS.forEach(function (g) {
       M[g[0] + g[1]] = [];
-      g[2].forEach(function (t) { T[t] = { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, form: [] }; });
+      g[2].forEach(function (t) { T[t] = { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, form: [], live: false, next: null }; });
     });
     // matchs triés par date : la forme (5 derniers) suit l'ordre chronologique
     (events || []).slice().sort(function (x, y) { return new Date(x.date) - new Date(y.date); })
@@ -71,19 +74,30 @@
         state: st === 'post' ? 'done' : (st === 'in' ? 'live' : 'pending'),
         date: e.date
       });
-      if (st !== 'post' || isNaN(sA) || isNaN(sB)) return;
+      // prochain adversaire : 1er match pas encore commencé de chaque équipe
+      if (st === 'pre') {
+        if (!T[frA].next) T[frA].next = { opp: frB, date: e.date, home: true };
+        if (!T[frB].next) T[frB].next = { opp: frA, date: e.date, home: false };
+        return;
+      }
+      if (isNaN(sA) || isNaN(sB)) return;
+      // CLASSEMENT DYNAMIQUE : un match en cours compte déjà, avec son score
+      // du moment ; les deux lignes concernées sont marquées « live ».
+      if (st === 'in') { T[frA].live = true; T[frB].live = true; }
       var a = T[frA], b = T[frB];
       a.p++; b.p++; a.gf += sA; a.ga += sB; b.gf += sB; b.ga += sA;
-      if (sA > sB) { a.w++; a.pts += 3; b.l++; a.form.push('W'); b.form.push('L'); }
-      else if (sA < sB) { b.w++; b.pts += 3; a.l++; b.form.push('W'); a.form.push('L'); }
-      else { a.d++; b.d++; a.pts++; b.pts++; a.form.push('D'); b.form.push('D'); }
+      var live = st === 'in';
+      if (sA > sB) { a.w++; a.pts += 3; b.l++; if (!live) { a.form.push('W'); b.form.push('L'); } }
+      else if (sA < sB) { b.w++; b.pts += 3; a.l++; if (!live) { b.form.push('W'); a.form.push('L'); } }
+      else { a.d++; b.d++; a.pts++; b.pts++; if (!live) { a.form.push('D'); b.form.push('D'); } }
     });
     return GROUPS.map(function (g) {
       var teams = g[2];
       var played = teams.some(function (t) { return T[t].p > 0; });
       var rows = teams.map(function (t) {
         var s = T[t];
-        return { fr: t, p: s.p, w: s.w, d: s.d, l: s.l, gf: s.gf, ga: s.ga, gd: s.gf - s.ga, pts: s.pts, form: s.form.slice(-5) };
+        return { fr: t, p: s.p, w: s.w, d: s.d, l: s.l, gf: s.gf, ga: s.ga, gd: s.gf - s.ga, pts: s.pts,
+          form: s.form.slice(-5), live: s.live, next: s.next };
       });
       if (played) rows.sort(function (x, y) { return y.pts - x.pts || y.gd - x.gd || y.gf - x.gf || x.fr.localeCompare(y.fr, 'fr'); });
       return { lg: g[0], num: g[1], played: played, rows: rows, matches: M[g[0] + g[1]] };
