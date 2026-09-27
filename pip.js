@@ -93,6 +93,7 @@
      d'ESPN n'est pas garanti), puis répartis dans le camp qui a marqué.
      Un csc est crédité à l'équipe qui en profite (ESPN pose déjà `team` sur le
      bénéficiaire) et signalé comme tel ; les tirs au but sont exclus. */
+  var MAX_SIDE = 5;                    // la fenêtre reste petite : 5 lignes par camp
   function scorers(d, homeId) {
     var evs = (d.keyEvents || []).map(function (e, i) { return { e: e, i: i }; })
       .filter(function (x) {
@@ -100,7 +101,7 @@
         if (e.shootout) return false;
         var t = ((e.type && e.type.type) || '') + ' ' + ((e.type && e.type.text) || '');
         if (/miss|saved|fail/i.test(t)) return false;          // penalty manqué
-        return /goal/i.test(t) || /penalty - scored/i.test(t);
+        return /goal/i.test(t) || /penalty - scored/i.test(t) || /card/i.test(t);
       })
       .sort(function (a, b) {
         var pa = (a.e.period && a.e.period.number) || 0, pb = (b.e.period && b.e.period.number) || 0;
@@ -115,11 +116,27 @@
       var t = ((e.type && e.type.type) || '') + ' ' + ((e.type && e.type.text) || '');
       var who = ((e.participants || [])[0] || {}).athlete;
       var name = ((who && who.displayName) || '').split(' ').slice(-1)[0];
-      var tag = /own/i.test(t) ? ' ' + T('og') : (/penalty/i.test(t) ? ' ' + T('pen') : '');
-      var item = ((e.clock && e.clock.displayValue) || '') + ' ' + name + tag;
-      (String(e.team && e.team.id) === homeId ? home : away).push(item);
+      var kind = /red/i.test(t) ? 'red' : /yellow/i.test(t) ? 'yellow' : 'goal';
+      var tag = kind !== 'goal' ? ''
+        : (/own/i.test(t) ? ' ' + T('og') : (/penalty/i.test(t) ? ' ' + T('pen') : ''));
+      (String(e.team && e.team.id) === homeId ? home : away).push({
+        kind: kind,
+        icon: kind === 'red' ? '🟥' : kind === 'yellow' ? '🟨' : '⚽',
+        txt: ((e.clock && e.clock.displayValue) || '') + ' ' + name + tag
+      });
     });
-    return { home: home, away: away };
+    return { home: trim(home), away: trim(away) };
+  }
+
+  // Trop d'événements pour la fenêtre : on sacrifie les cartons jaunes les plus
+  // anciens d'abord — un but ou un rouge ne disparaît jamais de la liste.
+  function trim(list) {
+    if (list.length <= MAX_SIDE) return list;
+    var keep = list.slice(), i = 0;
+    while (keep.length > MAX_SIDE && i < keep.length) {
+      if (keep[i].kind === 'yellow') { keep.splice(i, 1); } else { i++; }
+    }
+    return keep.length > MAX_SIDE ? keep.slice(keep.length - MAX_SIDE) : keep;
   }
   function kickoffTxt(iso) {
     try {
@@ -146,11 +163,14 @@
     '.p-status{font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:#8a9bb0;text-align:center;',
     '  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
     '.p-status.live{color:#ff4757}',
-    '.p-goals{display:grid;grid-template-columns:1fr auto 1fr;gap:6px;align-items:start;font-size:10px;color:#9fb0c2}',
+    '.p-goals{display:grid;grid-template-columns:1fr 1fr;gap:4px 10px;align-items:start;font-size:10px;color:#9fb0c2}',
     '.p-gcol{display:flex;flex-direction:column;gap:2px;min-width:0}',
-    '.p-gcol span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}',
+    '.p-gcol span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:flex;align-items:center;gap:4px}',
+    '.p-gcol span i{font-style:normal;font-size:9px;flex-shrink:0}',
     '.p-gcol.a{text-align:right}',
-    '.p-gball{opacity:.75}',
+    '.p-gcol.a span{flex-direction:row-reverse}',
+    '.p-gcol span.k-goal{color:#e6eef6}',
+    '.p-gcol span.k-red{color:#ff8a93}',
     '@media (max-width:260px){.p-name{font-size:12px}.p-score{font-size:24px}.p-flag{width:26px;height:18px}}'
   ].join('');
 
@@ -178,13 +198,15 @@
   function goalsHtml(m) {
     if (!(m.goalsHome.length || m.goalsAway.length)) return '';
     var col = function (list, cls) {
-      return '<div class="p-gcol ' + cls + '">' + list.map(function (g) { return '<span>' + esc(g) + '</span>'; }).join('') + '</div>';
+      return '<div class="p-gcol ' + cls + '">' + list.map(function (g) {
+        return '<span class="k-' + g.kind + '"><i>' + g.icon + '</i>' + esc(g.txt) + '</span>';
+      }).join('') + '</div>';
     };
-    return '<div class="p-goals">' + col(m.goalsHome, 'h') + '<span class="p-gball">⚽</span>' + col(m.goalsAway, 'a') + '</div>';
+    return '<div class="p-goals">' + col(m.goalsHome, 'h') + col(m.goalsAway, 'a') + '</div>';
   }
 
   function openDocPip(m) {
-    return window.documentPictureInPicture.requestWindow({ width: 340, height: 170 }).then(function (w) {
+    return window.documentPictureInPicture.requestWindow({ width: 360, height: 210 }).then(function (w) {
       _win = w;
       var st = w.document.createElement('style');
       st.textContent = CSS;
@@ -213,20 +235,22 @@
     ctx.fillText(m.home.abbr + '   ' + (m.state === 'pre' ? T('vs') : (m.home.score + ' – ' + m.away.score)) + '   ' + m.away.abbr, W / 2, H / 2);
     ctx.fillStyle = m.state === 'in' ? '#ff4757' : '#8a9bb0';
     ctx.font = '600 22px system-ui, sans-serif';
-    ctx.fillText((m.state === 'in' ? '● ' : '') + (m.clock || ''), W / 2, H - 92);
-    // buteurs rangés par camp : domicile à gauche, extérieur à droite
-    ctx.fillStyle = '#9fb0c2';
+    ctx.fillText((m.state === 'in' ? '● ' : '') + (m.clock || ''), W / 2, H - 104);
+    // buts ET cartons rangés par camp : domicile à gauche, extérieur à droite
     ctx.font = '500 17px system-ui, sans-serif';
-    ctx.textAlign = 'left';
-    m.goalsHome.slice(-3).forEach(function (g, i) { ctx.fillText(g, 22, H - 62 + i * 20); });
-    ctx.textAlign = 'right';
-    m.goalsAway.slice(-3).forEach(function (g, i) { ctx.fillText(g, W - 22, H - 62 + i * 20); });
+    var line = function (g, x, align, i) {
+      ctx.textAlign = align;
+      ctx.fillStyle = g.kind === 'red' ? '#ff8a93' : g.kind === 'yellow' ? '#9fb0c2' : '#e6eef6';
+      ctx.fillText(g.icon + ' ' + g.txt, x, H - 76 + i * 20);
+    };
+    m.goalsHome.slice(-4).forEach(function (g, i) { line(g, 22, 'left', i); });
+    m.goalsAway.slice(-4).forEach(function (g, i) { line(g, W - 22, 'right', i); });
     ctx.textAlign = 'center';
   }
 
   function openVideoPip(m) {
     _canvas = document.createElement('canvas');
-    _canvas.width = 640; _canvas.height = 300;
+    _canvas.width = 640; _canvas.height = 340;
     paint(m);
     _stream = _canvas.captureStream(4);          // 4 img/s : largement assez pour un score
     _video = document.createElement('video');
