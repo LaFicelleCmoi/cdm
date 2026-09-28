@@ -417,7 +417,12 @@
     if (_busy) return;
     _busy = true;
     fetchSummary(eventId, opts)
-      .then(function (d) { if (_open && _open.id === String(eventId)) setBody(body(d)); })
+      .then(function (d) {
+        if (!_open || _open.id !== String(eventId)) return;
+        var c = comp(d);
+        if (c && c.date) _open.opts = Object.assign({}, _open.opts, { date: c.date }); // évite une requête au PIP
+        setBody(body(d));
+      })
       .catch(function () { if (_open && _open.id === String(eventId)) setBody('<div class="msh-empty">' + esc(T('error')) + '</div>'); })
       .then(function () { _busy = false; });
   }
