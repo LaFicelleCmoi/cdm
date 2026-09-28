@@ -28,8 +28,8 @@
 <script src="competition.js?v=3"></script>
 <script src="i18n.js?v=37"></script>
 <script src="events.js?v=4"></script>
-<script src="match-sheet.js?v=2"></script>
-<script src="pip.js?v=3"></script>
+<script src="match-sheet.js?v=3"></script>
+<script src="pip.js?v=4"></script>
 <script src="fifa-ranking.js?v=3"></script>
 <style>
 :root {
@@ -1289,7 +1289,7 @@ document.addEventListener('click', (e) => {
   const pip = e.target.closest('[data-pip]');
   if (pip) {                                   // 📺 épingle le match en PIP
     e.stopPropagation();
-    if (window.MatchPiP) MatchPiP.open(pip.dataset.pip);
+    if (window.MatchPiP) MatchPiP.open(pip.dataset.pip, { date: pip.dataset.pipDate });
     return;
   }
   const t = e.target.closest('.is-sheet[data-ev]');
@@ -3042,7 +3042,7 @@ document.addEventListener('langchange', renderScorers);
     el.dataset.ev = ev.id;
     el.title = window.t('sheet_open');
     const pipBtn = (window.MatchPiP && MatchPiP.supported())
-      ? `<button class="lw-pip" type="button" data-pip="${esc(ev.id)}" title="${esc(window.t('pip_pin'))}" aria-label="${esc(window.t('pip_pin'))}">📺</button>`
+      ? `<button class="lw-pip" type="button" data-pip="${esc(ev.id)}" data-pip-date="${esc(ev.date)}" title="${esc(window.t('pip_pin'))}" aria-label="${esc(window.t('pip_pin'))}">📺</button>`
       : '';
     el.innerHTML = `
       ${pipBtn}
@@ -3330,7 +3330,10 @@ document.addEventListener('langchange', renderScorers);
       parts.forEach(p => ((p && p.events) || []).forEach(e => {
         if (e && e.id && parisDayKey(new Date(e.date)) === today) byId[e.id] = e;
       }));
-      update({ events: Object.keys(byId).map(k => byId[k]) });
+      const dayEvents = Object.keys(byId).map(k => byId[k]);
+      // le PIP se sert de ce lot : tant que la page rafraîchit, il ne demande rien
+      if (window.MatchPiP && MatchPiP.seed) MatchPiP.seed(dayEvents);
+      update({ events: dayEvents });
     } catch (err) {
       console.warn('Live widget fetch failed:', err);
       if (!el.querySelector('.lw-row')) el.className = 'live-widget'; // keep last good render, else stay hidden
