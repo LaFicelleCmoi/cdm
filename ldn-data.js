@@ -7,7 +7,8 @@
      frName(en)       -> nom FR (via TEAM_FR, sinon le nom ESPN),
      standings(events)-> [{ lg, num, played,
                             rows    : [{fr,p,w,d,l,gf,ga,gd,pts,form:['W','D',…],
-                                        live:bool, next:{opp,date,home}|null}],
+                                        live:bool, liveOpp:'adversaire du moment'|null,
+                                        next:{opp,date,home}|null}],
                             matches : [{id,t1,t2,s1,s2,state,date}] }]
    Classement DYNAMIQUE : les matchs EN COURS comptent avec leur score du
    moment (la ligne est marquée live:true), comme un classement en direct.
@@ -51,7 +52,7 @@
     var T = {}, M = {};
     GROUPS.forEach(function (g) {
       M[g[0] + g[1]] = [];
-      g[2].forEach(function (t) { T[t] = { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, form: [], live: false, next: null }; });
+      g[2].forEach(function (t) { T[t] = { p: 0, w: 0, d: 0, l: 0, gf: 0, ga: 0, pts: 0, form: [], live: false, liveOpp: null, next: null }; });
     });
     // matchs triés par date : la forme (5 derniers) suit l'ordre chronologique
     (events || []).slice().sort(function (x, y) { return new Date(x.date) - new Date(y.date); })
@@ -83,7 +84,10 @@
       if (isNaN(sA) || isNaN(sB)) return;
       // CLASSEMENT DYNAMIQUE : un match en cours compte déjà, avec son score
       // du moment ; les deux lignes concernées sont marquées « live ».
-      if (st === 'in') { T[frA].live = true; T[frB].live = true; }
+      if (st === 'in') {
+        T[frA].live = true; T[frA].liveOpp = frB;      // adversaire du moment
+        T[frB].live = true; T[frB].liveOpp = frA;
+      }
       var a = T[frA], b = T[frB];
       a.p++; b.p++; a.gf += sA; a.ga += sB; b.gf += sB; b.ga += sA;
       var live = st === 'in';
@@ -97,7 +101,7 @@
       var rows = teams.map(function (t) {
         var s = T[t];
         return { fr: t, p: s.p, w: s.w, d: s.d, l: s.l, gf: s.gf, ga: s.ga, gd: s.gf - s.ga, pts: s.pts,
-          form: s.form.slice(-5), live: s.live, next: s.next };
+          form: s.form.slice(-5), live: s.live, liveOpp: s.liveOpp, next: s.next };
       });
       if (played) rows.sort(function (x, y) { return y.pts - x.pts || y.gd - x.gd || y.gf - x.gf || x.fr.localeCompare(y.fr, 'fr'); });
       return { lg: g[0], num: g[1], played: played, rows: rows, matches: M[g[0] + g[1]] };
