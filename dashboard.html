@@ -25,9 +25,9 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/relativeTime.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="ldn-data.js?v=4"></script>
+<script src="ldn-data.js?v=5"></script>
 <script src="competition.js?v=3"></script>
-<script src="i18n.js?v=37"></script>
+<script src="i18n.js?v=38"></script>
 <script src="events.js?v=4"></script>
 <script src="match-sheet.js?v=3"></script>
 <script src="pip.js?v=4"></script>
@@ -463,8 +463,9 @@ body {
 .ldn-st-next img { width: 19px; height: 13px; object-fit: cover; border-radius: 2px; }
 .ldn-st-next.none { color: var(--muted); font-size: 0.85em; }
 .ldn-st-row.is-live { background: rgba(255,71,87,0.07); }
-.ldn-st-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--live, #ff4757); display: inline-block; margin-left: 5px; flex-shrink: 0; animation: ldnLiveDot 1.6s ease-in-out infinite; }
-@keyframes ldnLiveDot { 0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(255,71,87,0.5); } 50% { opacity: 0.55; box-shadow: 0 0 0 4px rgba(255,71,87,0); } }
+/* match en cours : le drapeau montre l'adversaire DU MOMENT, cerclé de rouge */
+.ldn-st-next.is-live img { box-shadow: 0 0 0 1.5px var(--live, #ff4757); animation: ldnLiveDot 1.6s ease-in-out infinite; }
+@keyframes ldnLiveDot { 0%, 100% { box-shadow: 0 0 0 1.5px rgba(255,71,87,0.9); } 50% { box-shadow: 0 0 0 3px rgba(255,71,87,0.25); } }
 .ldn-st-row:last-child { border-bottom: none; }
 .ldn-st-colhead { font-size: 0.6em; font-weight: 800; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); border-bottom: 1px solid rgba(255,255,255,0.12); padding-bottom: 5px; margin-bottom: 3px; }
 .ldn-st-colhead span:nth-child(3), .ldn-st-colhead span:nth-child(4), .ldn-st-colhead span:nth-child(5), .ldn-st-colhead span:nth-child(6) { text-align: center; }
@@ -1863,12 +1864,14 @@ if (!FAV) { setTimeout(openFavModal, 700); } else { renderFavHero(); }
         // 1er = tête de groupe (vert) ; dernier d'un groupe de 4 = relégation (rouge)
         const zone = played ? (rank === 1 ? ' is-top' : (rank === size && size >= 4 ? ' is-drop' : '')) : '';
         const gd = r.gd > 0 ? '+' + r.gd : String(r.gd);
-        const nx = r.next
-          ? `<span class="ldn-st-next" title="${escapeHTML(window.t('next_opp'))} : ${escapeHTML(r.next.opp)}">${fImg(r.next.opp, 40)}</span>`
+        // adversaire : celui du moment si le match est en cours, sinon le prochain
+        const opp = r.live && r.liveOpp ? r.liveOpp : (r.next ? r.next.opp : '');
+        const nx = opp
+          ? `<span class="ldn-st-next${r.live ? ' is-live' : ''}" title="${escapeHTML(window.t(r.live ? 'now_opp' : 'next_opp'))} : ${escapeHTML(opp)}">${fImg(opp, 40)}</span>`
           : `<span class="ldn-st-next none">–</span>`;
         return `<div class="ldn-st-row is-click${zone}${r.live ? ' is-live' : ''}" data-team="${escFav(r.fr)}">`
           + `<span class="ldn-st-rank">${rank}</span>`
-          + `<span class="ldn-st-team">${fImg(r.fr, 40)}<span>${escapeHTML(r.fr)}</span>${r.live ? `<i class="ldn-st-dot" title="${escapeHTML(window.t('live_badge'))}"></i>` : ''}</span>`
+          + `<span class="ldn-st-team">${fImg(r.fr, 40)}<span>${escapeHTML(r.fr)}</span></span>`
           + nx
           + `<span class="ldn-st-p">${played ? r.p : '–'}</span>`
           + `<span class="ldn-st-gd">${played ? gd : '–'}</span>`
