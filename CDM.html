@@ -24,9 +24,9 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/plugin/duration.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1.11.13/locale/fr.js"></script>
 <script src="team-data.js?v=1"></script>
-<script src="ldn-data.js?v=4"></script>
+<script src="ldn-data.js?v=5"></script>
 <script src="competition.js?v=3"></script>
-<script src="i18n.js?v=37"></script>
+<script src="i18n.js?v=38"></script>
 <script src="events.js?v=4"></script>
 <script src="match-sheet.js?v=3"></script>
 <script src="pip.js?v=4"></script>
@@ -206,7 +206,9 @@ html[data-comp="ldn"] .nav-tab[data-comp="wc"] { display: none !important; }
 .ldn-head-D { background: linear-gradient(135deg, #39424f, #57636f); }
 /* Classement dynamique : ligne d'une équipe qui joue en ce moment + prochain adversaire */
 .ldn-live-row td { background: rgba(255,71,87,0.06); }
-.ldn-live-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--live, #ff4757); display: inline-block; margin-left: 6px; flex-shrink: 0; animation: pulse-live 1.6s ease-in-out infinite; }
+/* match en cours : le drapeau montre l'adversaire DU MOMENT, cerclé de rouge */
+.ldn-next.is-live img { box-shadow: 0 0 0 1.5px var(--live, #ff4757); animation: ldnLiveFlag 1.6s ease-in-out infinite; }
+@keyframes ldnLiveFlag { 0%, 100% { box-shadow: 0 0 0 1.5px rgba(255,71,87,0.9); } 50% { box-shadow: 0 0 0 3px rgba(255,71,87,0.25); } }
 .ldn-next { display: inline-flex; align-items: center; justify-content: center; opacity: 0.85; }
 .ldn-next:hover { opacity: 1; }
 .ldn-next-none { color: var(--muted); }
@@ -889,8 +891,13 @@ function formatPlanningDate(frStr) {
   const ldnL = `<svg viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>`;
   const ldnD = `<svg viewBox="0 0 24 24"><path d="M19 13H5v-2h14v2z"/></svg>`;
 
-  // prochain adversaire : son drapeau, avec la date en infobulle
-  function ldnNextCell(next) {
+  // Drapeau de l'équipe adverse : celle affrontée EN CE MOMENT si le match est
+  // en cours (cerclée de rouge), sinon le prochain adversaire du groupe.
+  function ldnNextCell(r) {
+    if (r.live && r.liveOpp) {
+      return `<span class="ldn-next is-live" title="${esc(window.t('now_opp') + ' : ' + r.liveOpp)}">${flag(r.liveOpp, 40)}</span>`;
+    }
+    const next = r.next;
     if (!next) return '<span class="ldn-next-none">—</span>';
     let when = '';
     try {
@@ -951,9 +958,9 @@ function formatPlanningDate(frStr) {
         // 1er = tête de groupe (vert) ; dernier d'un groupe de 4 = relégation (rouge)
         const zone = played ? (i === 0 ? ' ldn-top' : (i === rows.length - 1 && rows.length >= 4 ? ' ldn-drop' : '')) : '';
         return `<tr class="r${i + 1}${zone}${r.live ? ' ldn-live-row' : ''}">
-          <td><div class="team-name-cell"><span class="rank-badge">${i + 1}</span><span class="p-flag" style="margin:0;">${flag(r.fr, 40)}</span><span class="team-name-text">${esc(r.fr)}</span>${r.live ? '<span class="ldn-live-dot" title="' + esc(window.t('live_badge')) + '"></span>' : ''}</div></td>
+          <td><div class="team-name-cell"><span class="rank-badge">${i + 1}</span><span class="p-flag" style="margin:0;">${flag(r.fr, 40)}</span><span class="team-name-text">${esc(r.fr)}</span></div></td>
           <td>${r.p}</td><td>${r.w}</td><td>${r.d}</td><td>${r.l}</td><td>${r.gf}</td><td>${r.ga}</td><td>${r.gd > 0 ? '+' + r.gd : r.gd}</td><td class="pts-cell">${r.pts}</td>
-          <td>${ldnNextCell(r.next)}</td>
+          <td>${ldnNextCell(r)}</td>
           <td><div class="form-guide">${ldnFormCells(r.form)}</div></td>
         </tr>`;
       }).join('');
@@ -1727,14 +1734,14 @@ function nextOpponent(g, team) {
   }
   return '';
 }
-// L'équipe joue-t-elle en ce moment ? (classement dynamique)
-function liveNow(g, team) {
+// Adversaire affronté EN CE MOMENT ('' si l'équipe ne joue pas)
+function liveOpponent(g, team) {
   for (let mi = 0; mi < matchPairs.length; mi++) {
     const [a, b] = matchPairs[mi];
     const t1 = groupsConfig[g][a], t2 = groupsConfig[g][b];
-    if ((t1 === team || t2 === team) && matchStatus[`${g}_${mi + 1}`] === 'live') return true;
+    if ((t1 === team || t2 === team) && matchStatus[`${g}_${mi + 1}`] === 'live') return t1 === team ? t2 : t1;
   }
-  return false;
+  return '';
 }
 
 function renderGroup(g) {
@@ -1757,8 +1764,9 @@ function renderGroup(g) {
         return `<div class="form-circle form-empty"></div>`;
     }).join('');
 
-    const nx = nextOpponent(g, t.name);
-    const isLive = liveNow(g, t.name);
+    const liveOpp = liveOpponent(g, t.name);
+    const nx = liveOpp || nextOpponent(g, t.name);
+    const isLive = !!liveOpp;
     if (isLive) tr.classList.add('ldn-live-row');
     tr.innerHTML=`
       <td>
@@ -1766,7 +1774,6 @@ function renderGroup(g) {
           <span class="rank-badge">${i+1}</span>
           <span class="p-flag" style="font-size: 1.1em; margin: 0;">${flagMap[t.name] || "🏳"}</span>
           <span class="team-name-text">${t.name}</span>
-          ${isLive ? `<span class="ldn-live-dot" title="${window.t('live_badge')}"></span>` : ''}
         </div>
       </td>
       <td>${t.p}</td>
@@ -1777,7 +1784,7 @@ function renderGroup(g) {
       <td>${t.ga}</td>
       <td>${t.gd}</td>
       <td class="pts-cell">${t.pts}</td>
-      <td>${nx ? `<span class="ldn-next" title="${window.t('next_opp')} : ${nx}">${flagMap[nx] || '🏳'}</span>` : '<span class="ldn-next-none">—</span>'}</td>
+      <td>${nx ? `<span class="ldn-next${isLive ? ' is-live' : ''}" title="${window.t(isLive ? 'now_opp' : 'next_opp')} : ${nx}">${flagMap[nx] || '🏳'}</span>` : '<span class="ldn-next-none">—</span>'}</td>
       <td><div class="form-guide">${formHTML}</div></td>
     `;
     tbody.appendChild(tr);
