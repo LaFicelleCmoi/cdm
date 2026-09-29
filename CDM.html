@@ -288,6 +288,9 @@ html[data-comp="ldn"] .nav-tab[data-comp="wc"] { display: none !important; }
 .p-vs { font-weight: 700; color: var(--muted); font-size: 0.8em; margin: 0 4px; }
 .p-score-val { font-family: var(--font-b); font-weight: 800; color: var(--gold); font-size: 1.1em; background: rgba(255,255,255,0.08); padding: 2px 8px; border-radius: 4px; margin: 0 4px; display: none; }
 .p-score-val.live-val { color: var(--live); border: 1px solid rgba(255,71,87,0.5); background: rgba(255,71,87,0.1); }
+/* Calendrier / phase finale LdN : les scores sont rendus d'un bloc, sans le JS
+   du planning CDM qui affiche les pastilles une à une → toujours visibles. */
+.p-score-val.ldn-val { display: inline-block; }
 .match-p-meta { display: flex; flex-direction: column; align-items: center; gap: 4px; }
 .group-tag-pill { font-size: 0.55em; font-weight: 800; color: #fff; background: linear-gradient(135deg, var(--red), var(--red2)); padding: 2px 6px; border-radius: 10px; text-transform: uppercase; letter-spacing: 0.1em; white-space: nowrap; }
 
@@ -1010,11 +1013,11 @@ function formatPlanningDate(frStr) {
         let meta, mid, hCls = '', aCls = '';
         if (state === 'post') {
           meta = `<div class="match-p-time">${window.t('ldn_ft')}</div>`;
-          mid = `<span class="p-score-val">${isNaN(sh) ? '' : sh}</span><span class="p-vs">–</span><span class="p-score-val">${isNaN(sa) ? '' : sa}</span>`;
+          mid = `<span class="p-score-val ldn-val">${isNaN(sh) ? '–' : sh}</span><span class="p-vs">–</span><span class="p-score-val ldn-val">${isNaN(sa) ? '–' : sa}</span>`;
           if (!isNaN(sh) && !isNaN(sa)) { if (sh > sa) hCls = ' ldn-win'; else if (sa > sh) aCls = ' ldn-win'; }
         } else if (state === 'in') {
           meta = `<div class="match-p-time ldn-cal-live">🔴 ${esc(c.status.displayClock || 'LIVE')}</div>`;
-          mid = `<span class="p-score-val">${isNaN(sh) ? 0 : sh}</span><span class="p-vs">–</span><span class="p-score-val">${isNaN(sa) ? 0 : sa}</span>`;
+          mid = `<span class="p-score-val ldn-val live-val">${isNaN(sh) ? 0 : sh}</span><span class="p-vs">–</span><span class="p-score-val ldn-val live-val">${isNaN(sa) ? 0 : sa}</span>`;
         } else {
           meta = `<div class="match-p-time">${timeFmt.format(new Date(e.date))}</div>`;
           mid = `<span class="p-vs">VS</span>`;
